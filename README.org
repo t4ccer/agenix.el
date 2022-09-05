@@ -1,0 +1,23 @@
+* =agenix.el=
+
+=agenix.el= enables editing =agenix= secrets without leaving emacs.
+
+** Usage
+
+*** Decrypt a file
+
+Inside buffer with encrypted file run =M-x agenix-decrypt-this-buffer=. It will open a new buffer with decrypted content.
+
+*** Encrypt a file
+
+Inside buffer opened previously run =M-x agenix-encrypt-this-buffer=. It will encrypt content of the buffer, override previously decrypted file and close a buffer.
+
+** License
+
+Copyright (C) 2022 Tomasz Maciosowski (t4ccer)
+
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this program. If not, see http://www.gnu.org/licenses/.
