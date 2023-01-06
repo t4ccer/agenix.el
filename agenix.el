@@ -97,5 +97,5 @@
                 (switch-to-buffer agenix-encrypted-buf))
             (error (car (cdr age-res)))))))))
 
-(provide 'agenix)
+(provide 'agenix.el)
 ;;; agenix.el ends here
