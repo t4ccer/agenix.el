@@ -21,6 +21,19 @@
 
 ;;; Code:
 
+(defcustom agenix-age-program "age"
+  "The age program."
+  :group 'agenix
+  :type 'string)
+
+(defvar-local agenix--encrypted-fp nil)
+
+(defvar-local agenix--keys nil)
+
+(defvar-local agenix--encrypted-buf nil)
+
+(defvar-local agenix--init nil)
+
 (define-derived-mode agenix-encrypted-mode text-mode "Age[encrypted]"
   "Major mode for encrypted age files."
   (read-only-mode))
@@ -30,7 +43,7 @@
 
 (defun process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
-  (with-temp-buffer 
+  (with-temp-buffer
     (list (apply 'call-process program nil (current-buffer) nil args)
           (buffer-string))))
 
@@ -38,31 +51,34 @@
   "Decrypt current buffer in a new buffer"
   (interactive)
   (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
-         (raw-keys (shell-command-to-string "((nix-instantiate --eval -E \"(let rules = import ./secrets.nix; in builtins.concatStringsSep \\\"\n\\\" rules.\\\".netrc.age\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') | sed '/^$/d' || exit 1)"))
-         (keys (seq-filter (lambda (s) (not (string= s ""))) (s-split "\n" raw-keys)))
+         (raw-keys (shell-command-to-string
+                    (concat "((nix-instantiate --eval -E \"(let rules = import ./secrets.nix; in builtins.concatStringsSep \\\"\n\\\" rules.\\\""
+                            (file-name-nondirectory (buffer-file-name))
+                            "\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') | sed '/^$/d' || exit 1)")))
+         (keys (seq-filter (lambda (s) (not (string= s ""))) (split-string raw-keys "\n")))
          (encrypted-fp (buffer-file-name))
-         (encypted-buf (current-buffer))
+         (encrypted-buf (current-buffer))
          (age-flags (list "--decrypt")))
 
     (when (file-exists-p "~/.ssh/id_ed25519")
       (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_ed25519")))))
-    
+
     (when (file-exists-p "~/.ssh/id_rsa")
       (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_rsa")))))
-    
+
     (setq age-flags (nconc age-flags (list encrypted-fp)))
-    
-    (let* ((age-res (apply 'process-exit-code-and-output "age" age-flags)))
+
+    (let* ((age-res (apply 'process-exit-code-and-output agenix-age-program age-flags)))
       (if (= 0 (car age-res))
           (progn
             (switch-to-buffer (generate-new-buffer new-name))
             (agenix-decrypted-mode)
             (setq buffer-auto-save-file-name nil)
             (insert (car (cdr age-res)))
-            (set (make-local-variable 'agenix-encyrpted-fp) encrypted-fp)
-            (set (make-local-variable 'agenix-keys) keys)
-            (set (make-local-variable 'agenix-encrypted-buf) encypted-buf)
-            (set (make-local-variable 'agenix-init) (buffer-string))
+            (setq agenix--encrypted-fp encrypted-fp)
+            (setq agenix--keys keys)
+            (setq agenix--encrypted-buf encrypted-buf)
+            (setq agenix--init (buffer-string))
             (goto-char (point-min)))
         (error (car (cdr age-res)))))))
 
@@ -70,24 +86,24 @@
   "Decrypt current buffer in a new buffer"
   (interactive)
   (let* ((age-flags (list "--encrypt")))
-    (if (string= (buffer-string) agenix-init)
+    (if (string= (buffer-string) agenix--init)
         (progn
           (kill-this-buffer)
-          (switch-to-buffer agenix-encrypted-buf))
+          (switch-to-buffer agenix--encrypted-buf))
       (progn
-        (dolist (k agenix-keys)
+        (dolist (k agenix--keys)
           (setq age-flags (nconc age-flags (list "--recipient" k))))
-        (setq age-flags (nconc age-flags (list "-o" agenix-encyrpted-fp)))
+        (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
         (let* ((decrypted-text (buffer-string))
                (age-res
                 (with-temp-buffer
                   (list
-                   (apply 'call-process-region decrypted-text nil "age" nil (current-buffer) t age-flags)
+                   (apply 'call-process-region decrypted-text nil agenix-age-program nil (current-buffer) t age-flags)
                    (buffer-string)))))
           (if (= 0 (car age-res))
               (progn
                 (kill-this-buffer)
-                (switch-to-buffer agenix-encrypted-buf))
+                (switch-to-buffer agenix--encrypted-buf))
             (error (car (cdr age-res)))))))))
 
 (provide 'agenix.el)
