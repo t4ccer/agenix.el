@@ -53,7 +53,7 @@
   (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
          (raw-keys (shell-command-to-string
                     (concat "((nix-instantiate --eval -E \"(let rules = import ./secrets.nix; in builtins.concatStringsSep \\\"\n\\\" rules.\\\""
-                            (buffer-file-name)
+                            (file-name-nondirectory (buffer-file-name))
                             "\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') | sed '/^$/d' || exit 1)")))
          (keys (seq-filter (lambda (s) (not (string= s ""))) (split-string raw-keys "\n")))
          (encrypted-fp (buffer-file-name))
