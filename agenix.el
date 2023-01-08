@@ -6,7 +6,7 @@
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/t4ccer/agenix.el
-;; Version: 0.2
+;; Version: 0.2.1
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -27,12 +27,12 @@
 
 ;; Decrypt a file
 
-;; Inside buffer with encrypted file run =M-x agenix-decrypt-this-buffer=. It will open a new buffer
+;; Inside buffer with encrypted file run =M-x agenix-decrypt-buffer=. It will open a new buffer
 ;; with decrypted content.
 
 ;; Encrypt a file
 
-;; Inside buffer opened previously run =M-x agenix-encrypt-this-buffer=. It will encrypt content of
+;; Inside buffer opened previously run =M-x agenix-encrypt-buffer=. It will encrypt content of
 ;; the buffer, override previously decrypted file and close a buffer.
 
 ;;; Code:
@@ -63,75 +63,88 @@
     (list (apply 'call-process program nil (current-buffer) nil args)
           (buffer-string))))
 
-(defun agenix-decrypt-this-buffer ()
-  "Decrypt current buffer in a new buffer."
-  (interactive)
-  (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
-         (raw-keys (shell-command-to-string
-                    (concat "((nix-instantiate --eval -E "
-                            "\"(let rules = import ./secrets.nix; "
-                            "in builtins.concatStringsSep \\\"\n\\\" rules.\\\""
-                            (file-name-nondirectory (buffer-file-name))
-                            "\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') "
-                            "| sed '/^$/d' "
-                            "|| exit 1)")))
-         (keys (seq-filter (lambda (s) (not (string= s ""))) (split-string raw-keys "\n")))
-         (encrypted-fp (buffer-file-name))
-         (encrypted-buf (current-buffer))
-         (age-flags (list "--decrypt")))
+(define-obsolete-function-alias 'agenix-decrypt-this-buffer 'agenix-decrypt-buffer "0.2.1"
+  "Decrypt current buffer in a new buffer.")
 
-    (when (file-exists-p "~/.ssh/id_ed25519")
-      (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_ed25519")))))
+;;;###autoload
+(defun agenix-decrypt-buffer (&optional encrypted-buffer)
+  "Decrypt ENCRYPTED-BUFFER in a new buffer.
+If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
+  (interactive
+   (when current-prefix-arg
+     (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
+  (with-current-buffer (or encrypted-buffer (current-buffer))
+    (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
+           (encrypted-fp (buffer-file-name))
+           (raw-keys (shell-command-to-string
+                      (concat "nix-instantiate --eval --expr "
+                              "'(import ./secrets.nix).\""
+                              (file-name-nondirectory encrypted-fp)
+                              "\".publicKeys' | sed 's/\[ \"//; s/\" ]//'")))
+           (keys (split-string raw-keys "\" \""))
+           (age-flags (list "--decrypt")))
 
-    (when (file-exists-p "~/.ssh/id_rsa")
-      (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_rsa")))))
+      (when (file-exists-p "~/.ssh/id_ed25519")
+        (setq age-flags
+              (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_ed25519")))))
 
-    (setq age-flags (nconc age-flags (list encrypted-fp)))
+      (when (file-exists-p "~/.ssh/id_rsa")
+        (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_rsa")))))
 
-    (let* ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
-      (if (= 0 (car age-res))
+      (setq age-flags (nconc age-flags (list encrypted-fp)))
+
+      (let* ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
+        (if (= 0 (car age-res))
+            (progn
+              (switch-to-buffer (generate-new-buffer new-name))
+              (agenix-decrypted-mode)
+              (setq buffer-auto-save-file-name nil)
+              (insert (car (cdr age-res)))
+              (setq agenix--encrypted-fp encrypted-fp)
+              (setq agenix--keys keys)
+              (setq agenix--encrypted-buf encrypted-buffer)
+              (setq agenix--init (buffer-string))
+              (goto-char (point-min)))
+          (error (car (cdr age-res))))))))
+
+(define-obsolete-function-alias 'agenix-encrypt-this-buffer 'agenix-encrypt-buffer "0.2.1"
+  "Encrypt current buffer in a new buffer.")
+
+;;;###autoload
+(defun agenix-encrypt-buffer (&optional unencrypted-buffer)
+  "Encrypt UNENCRYPTED-BUFFER in a new buffer.
+If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
+  (interactive
+   (when current-prefix-arg
+     (list (read-buffer "Unencrypted buffer: " (current-buffer) t))))
+  (with-current-buffer (or unencrypted-buffer (current-buffer))
+    (let* ((age-flags (list "--encrypt")))
+      (if (string= (buffer-string) agenix--init)
           (progn
-            (switch-to-buffer (generate-new-buffer new-name))
-            (agenix-decrypted-mode)
-            (setq buffer-auto-save-file-name nil)
-            (insert (car (cdr age-res)))
-            (setq agenix--encrypted-fp encrypted-fp)
-            (setq agenix--keys keys)
-            (setq agenix--encrypted-buf encrypted-buf)
-            (setq agenix--init (buffer-string))
-            (goto-char (point-min)))
-        (error (car (cdr age-res)))))))
-
-(defun agenix-encrypt-this-buffer ()
-  "Decrypt current buffer in a new buffer."
-  (interactive)
-  (let* ((age-flags (list "--encrypt")))
-    (if (string= (buffer-string) agenix--init)
+            (kill-buffer)
+            (switch-to-buffer agenix--encrypted-buf))
         (progn
-          (kill-this-buffer)
-          (switch-to-buffer agenix--encrypted-buf))
-      (progn
-        (dolist (k agenix--keys)
-          (setq age-flags (nconc age-flags (list "--recipient" k))))
-        (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
-        (let* ((decrypted-text (buffer-string))
-               (age-res
-                (with-temp-buffer
-                  (list
-                   (apply 'call-process-region
-                          decrypted-text
-                          nil
-                          agenix-age-program
-                          nil
-                          (current-buffer)
-                          t
-                          age-flags)
-                   (buffer-string)))))
-          (if (= 0 (car age-res))
-              (progn
-                (kill-this-buffer)
-                (switch-to-buffer agenix--encrypted-buf))
-            (error (car (cdr age-res)))))))))
+          (dolist (k agenix--keys)
+            (setq age-flags (nconc age-flags (list "--recipient" k))))
+          (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
+          (let* ((decrypted-text (buffer-string))
+                 (age-res
+                  (with-temp-buffer
+                    (list
+                     (apply 'call-process-region
+                            decrypted-text
+                            nil
+                            agenix-age-program
+                            nil
+                            (current-buffer)
+                            t
+                            age-flags)
+                     (buffer-string)))))
+            (if (= 0 (car age-res))
+                (progn
+                  (kill-buffer)
+                  (switch-to-buffer agenix--encrypted-buf))
+              (error (car (cdr age-res))))))))))
 
 (provide 'agenix)
 ;;; agenix.el ends here
