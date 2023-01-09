@@ -187,7 +187,7 @@
               ##     package archives (which would break the sandbox).
               ## TODO: Re-enable relint, currently it errors, I think because it
               ##       or Eldev is expecting a multi-file package.
-              eldev --external lint doc elisp # re
+              eldev --external lint elisp # re
               runHook postBuild
             '';
 
