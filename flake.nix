@@ -2,19 +2,19 @@
   description = "Decrypt and encrypt agenix secrets inside Emacs";
 
   inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/release-22.11";
+
     bash-strict-mode = {
+      url = "github:sellout/bash-strict-mode";
       inputs.nixpkgs.follows = "nixpkgs";
-      url = github:sellout/bash-strict-mode;
     };
 
-    flake-utils.url = github:numtide/flake-utils;
+    flake-utils.url = "github:numtide/flake-utils";
 
     homeManager = {
+      url = "github:nix-community/home-manager/release-22.11";
       inputs.nixpkgs.follows = "nixpkgs";
-      url = github:nix-community/home-manager/release-22.11;
     };
-
-    nixpkgs.url = github:NixOS/nixpkgs/release-22.11;
   };
 
   outputs = inputs:
