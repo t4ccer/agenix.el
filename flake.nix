@@ -1,6 +1,22 @@
 {
   description = "Decrypt and encrypt agenix secrets inside Emacs";
 
+  inputs = {
+    bash-strict-mode = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = github:sellout/bash-strict-mode;
+    };
+
+    flake-utils.url = github:numtide/flake-utils;
+
+    homeManager = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = github:nix-community/home-manager/release-22.11;
+    };
+
+    nixpkgs.url = github:NixOS/nixpkgs/release-22.11;
+  };
+
   outputs = inputs:
     {
       overlays = {
@@ -180,20 +196,4 @@
       # Nix code formatter, https://github.com/kamadorueda/alejandra#readme
       formatter = pkgs.alejandra;
     });
-
-  inputs = {
-    bash-strict-mode = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = github:sellout/bash-strict-mode;
-    };
-
-    flake-utils.url = github:numtide/flake-utils;
-
-    homeManager = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = github:nix-community/home-manager/release-22.11;
-    };
-
-    nixpkgs.url = github:NixOS/nixpkgs/release-22.11;
-  };
 }
