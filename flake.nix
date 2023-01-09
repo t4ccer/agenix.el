@@ -71,11 +71,11 @@
 
         agenix-el =
           inputs.bash-strict-mode.lib.checkedDrv pkgs
-          (pkgs.emacsPackages.trivialBuild (let
+          (pkgs.emacsPackages.trivialBuild {
+            inherit ELDEV_LOCAL src;
+
             pname = "agenix";
             version = "0.2";
-          in {
-            inherit ELDEV_LOCAL pname src version;
 
             nativeBuildInputs = [
               pkgs.emacs
@@ -98,7 +98,7 @@
               eldev --packaged test
               runHook postInstallCheck
             '';
-          }));
+          });
       };
 
       devShells.default =
