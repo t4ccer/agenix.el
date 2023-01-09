@@ -117,12 +117,12 @@
             ++ builtins.attrValues inputs.self.packages.${system};
 
           nativeBuildInputs = [
+            # Nix language server,
+            # https://github.com/oxalica/nil#readme
+            pkgs.nil
             # Bash language server,
             # https://github.com/bash-lsp/bash-language-server#readme
             pkgs.nodePackages.bash-language-server
-            # Nix language server,
-            # https://github.com/nix-community/rnix-lsp#readme
-            pkgs.rnix-lsp
           ];
         });
 
