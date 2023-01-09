@@ -197,6 +197,26 @@
               runHook preInstall
             '';
           });
+
+        nix-fmt = pkgs.stdenv.mkDerivation {
+          inherit src;
+
+          name = "nix fmt";
+
+          nativeBuildInputs = [inputs.self.formatter.${system}];
+
+          buildPhase = ''
+            runHook preBuild
+            alejandra --check .
+            runHook postBuild
+          '';
+
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out"
+            runHook preInstall
+          '';
+        };
       };
 
       # Nix code formatter, https://github.com/kamadorueda/alejandra#readme
