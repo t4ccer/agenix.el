@@ -4,7 +4,7 @@
 
 ;; Author: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
-;; Version: 0.1
+;; Version: 0.2
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@
 (define-derived-mode agenix-decrypted-mode text-mode "Age[decrypted]"
   "Major mode for decrypted age files.")
 
-(defun process-exit-code-and-output (program &rest args)
+(defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
   (with-temp-buffer
     (list (apply 'call-process program nil (current-buffer) nil args)
@@ -68,7 +68,7 @@
 
     (setq age-flags (nconc age-flags (list encrypted-fp)))
 
-    (let* ((age-res (apply 'process-exit-code-and-output agenix-age-program age-flags)))
+    (let* ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
       (if (= 0 (car age-res))
           (progn
             (switch-to-buffer (generate-new-buffer new-name))
@@ -106,5 +106,5 @@
                 (switch-to-buffer agenix--encrypted-buf))
             (error (car (cdr age-res)))))))))
 
-(provide 'agenix.el)
+(provide 'agenix)
 ;;; agenix.el ends here
