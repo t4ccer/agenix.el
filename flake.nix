@@ -63,6 +63,12 @@
 
       emacsPath = package: "${package}/${emacsPackageDir}/${package.ename}-${package.version}";
 
+      ## Read version in format: ;; Version: xx.yy
+      readVersion = fp:
+        builtins.elemAt
+        (builtins.match ".*(;; Version: ([[:digit:]]+\.[[:digit:]]+)).*" (builtins.readFile fp))
+        1;
+
       ## We need to tell Eldev where to find its Emacs package.
       ELDEV_LOCAL = emacsPath pkgs.emacsPackages.eldev;
     in {
@@ -75,7 +81,7 @@
             inherit ELDEV_LOCAL src;
 
             pname = "agenix";
-            version = "0.2";
+            version = readVersion ./agenix.el;
 
             nativeBuildInputs = [
               pkgs.emacs
