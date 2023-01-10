@@ -1,10 +1,14 @@
-;;; agenix.el --- Decrypt and encrypt agenix secrets inside Emacs. -*- lexical-binding: t -*-
+;;; agenix.el --- Decrypt and encrypt agenix secrets  -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2022 Tomasz Maciosowski (t4ccer)
 
 ;; Author: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
+;; Package-Requires: ((emacs "25.1"))
+;; URL: https://github.com/t4ccer/agenix.el
 ;; Version: 0.2
+
+;; This file is NOT part of GNU Emacs.
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -18,6 +22,18 @@
 
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; Decrypt a file
+
+;; Inside buffer with encrypted file run =M-x agenix-decrypt-this-buffer=. It will open a new buffer
+;; with decrypted content.
+
+;; Encrypt a file
+
+;; Inside buffer opened previously run =M-x agenix-encrypt-this-buffer=. It will encrypt content of
+;; the buffer, override previously decrypted file and close a buffer.
 
 ;;; Code:
 
@@ -48,13 +64,17 @@
           (buffer-string))))
 
 (defun agenix-decrypt-this-buffer ()
-  "Decrypt current buffer in a new buffer"
+  "Decrypt current buffer in a new buffer."
   (interactive)
   (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
          (raw-keys (shell-command-to-string
-                    (concat "((nix-instantiate --eval -E \"(let rules = import ./secrets.nix; in builtins.concatStringsSep \\\"\n\\\" rules.\\\""
+                    (concat "((nix-instantiate --eval -E "
+                            "\"(let rules = import ./secrets.nix; "
+                            "in builtins.concatStringsSep \\\"\n\\\" rules.\\\""
                             (file-name-nondirectory (buffer-file-name))
-                            "\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') | sed '/^$/d' || exit 1)")))
+                            "\\\".publicKeys)\" | sed 's/\"//g' | sed 's/\\\\n/\\n/g') "
+                            "| sed '/^$/d' "
+                            "|| exit 1)")))
          (keys (seq-filter (lambda (s) (not (string= s ""))) (split-string raw-keys "\n")))
          (encrypted-fp (buffer-file-name))
          (encrypted-buf (current-buffer))
@@ -83,7 +103,7 @@
         (error (car (cdr age-res)))))))
 
 (defun agenix-encrypt-this-buffer ()
-  "Decrypt current buffer in a new buffer"
+  "Decrypt current buffer in a new buffer."
   (interactive)
   (let* ((age-flags (list "--encrypt")))
     (if (string= (buffer-string) agenix--init)
@@ -98,7 +118,14 @@
                (age-res
                 (with-temp-buffer
                   (list
-                   (apply 'call-process-region decrypted-text nil agenix-age-program nil (current-buffer) t age-flags)
+                   (apply 'call-process-region
+                          decrypted-text
+                          nil
+                          agenix-age-program
+                          nil
+                          (current-buffer)
+                          t
+                          age-flags)
                    (buffer-string)))))
           (if (= 0 (car age-res))
               (progn
