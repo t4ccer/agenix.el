@@ -3,7 +3,7 @@
 
 # Nix build
 /outputs
-/result
+/result*
 /source
 
 # Compiled
