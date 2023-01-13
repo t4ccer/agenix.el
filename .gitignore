@@ -1,0 +1,13 @@
+# Direnv
+/.direnv
+
+# Nix build
+/outputs
+/result*
+/source
+
+# Compiled
+*.elc
+
+# Packaging
+/.eldev
