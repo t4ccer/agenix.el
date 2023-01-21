@@ -6,7 +6,7 @@
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/t4ccer/agenix.el
-;; Version: 0.3
+;; Version: 0.4
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -127,9 +127,9 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
   (with-current-buffer (or unencrypted-buffer (current-buffer))
     (let* ((age-flags (list "--encrypt")))
       (if (string= (buffer-string) agenix--init)
-          (progn
-            (kill-buffer)
-            (switch-to-buffer agenix--encrypted-buf))
+          (let ((decrypted-buf (current-buffer)))
+            (switch-to-buffer agenix--encrypted-buf)
+            (kill-buffer decrypted-buf))
         (progn
           (dolist (k agenix--keys)
             (setq age-flags (nconc age-flags (list "--recipient" k))))
@@ -148,9 +148,9 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
                             age-flags)
                      (buffer-string)))))
             (if (= 0 (car age-res))
-                (progn
-                  (kill-buffer)
-                  (switch-to-buffer agenix--encrypted-buf))
+                (let ((decrypted-buf (current-buffer)))
+                  (switch-to-buffer agenix--encrypted-buf)
+                  (kill-buffer decrypted-buf))
               (error (car (cdr age-res))))))))))
 
 (provide 'agenix)
