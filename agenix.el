@@ -6,7 +6,7 @@
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/t4ccer/agenix.el
-;; Version: 0.2.1
+;; Version: 0.3
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -39,6 +39,11 @@
 
 (defcustom agenix-age-program "age"
   "The age program."
+  :group 'agenix
+  :type 'string)
+
+(defcustom agenix-jq-program "jq"
+  "The jq program."
   :group 'agenix
   :type 'string)
 
@@ -77,11 +82,13 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
     (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
            (encrypted-fp (buffer-file-name))
            (raw-keys (shell-command-to-string
-                      (concat "nix-instantiate --eval --expr "
+                      (concat "nix-instantiate --strict --json --eval --expr "
                               "'(import ./secrets.nix).\""
                               (file-name-nondirectory encrypted-fp)
-                              "\".publicKeys' | sed 's/\[ \"//; s/\" ]//'")))
-           (keys (split-string raw-keys "\" \""))
+                              "\".publicKeys' | "
+                              agenix-jq-program
+                              " -r '.[]'")))
+           (keys (butlast (split-string raw-keys "\n")))
            (age-flags (list "--decrypt")))
 
       (when (file-exists-p "~/.ssh/id_ed25519")
