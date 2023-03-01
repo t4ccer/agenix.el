@@ -51,6 +51,8 @@
 
 (defvar-local agenix--decrypted-cursor nil)
 
+(defvar-local agenix--undo-list nil)
+
 (define-derived-mode agenix-mode text-mode "agenix"
   "Major mode for agenix files.
 Don't use directly, use `agenix-mode-if-with-secrtes-nix' to ensure that
@@ -86,6 +88,7 @@ Revert BUFFER to the state before decryption."
      (list (read-buffer "Revert buffer: " (current-buffer) t))))
   (with-current-buffer (or buffer (current-buffer))
     (setq agenix--decrypted-cursor (point))
+    (setq agenix--undo-list buffer-undo-list)
     (erase-buffer)
     (insert-file-contents agenix--encrypted-fp)
     (read-only-mode 1)))
@@ -127,6 +130,7 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
               (read-only-mode -1)
               (erase-buffer)
               (insert (car (cdr age-res)))
+              (setq buffer-undo-list agenix--undo-list)
 
               ;; NOTE: Do we need it?
               ;; (delete-backward-char 1) ; Remove newline at the end of age output
