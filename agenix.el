@@ -77,39 +77,6 @@ secres.nix exists."
     (list (apply 'call-process program nil (current-buffer) nil args)
           (buffer-string))))
 
-(cl-defstruct agenix--decryption-result str original-path keys)
-
-;;;###autoload
-(defun agenix--decrypt-buffer-to-str (encrypted-buffer)
-  "Decrypt ENCRYPTED-BUFFER and return 'agenix--decryption-result' struct."
-  (with-current-buffer encrypted-buffer
-    (let* ((encrypted-fp (buffer-file-name))
-           (raw-keys (shell-command-to-string
-                      (concat "nix-instantiate --strict --json --eval --expr "
-                              "'(import ./secrets.nix).\""
-                              (file-name-nondirectory encrypted-fp)
-                              "\".publicKeys' | "
-                              agenix-jq-program
-                              " -r '.[]'")))
-           (keys (butlast (split-string raw-keys "\n")))
-           (age-flags (list "--decrypt")))
-
-      (dolist (key-path agenix-key-files)
-        (when (file-exists-p (expand-file-name key-path))
-          (setq age-flags
-                (nconc age-flags (list "--identity" (expand-file-name key-path))))))
-
-      (setq age-flags (nconc age-flags (list encrypted-fp)))
-
-      (let* ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
-        (if (= 0 (car age-res))
-            (make-agenix--decryption-result
-             :str (car (cdr age-res))
-             :original-path encrypted-fp
-             :keys keys)
-          (error
-           (car (cdr age-res))))))))
-
 ;;;###autoload
 (defun agenix-revert-encrypted (&optional buffer)
   "Interenal use only.
@@ -124,32 +91,58 @@ Revert BUFFER to the state before decryption."
     (read-only-mode 1)))
 
 ;;;###autoload
-  (defun agenix-decrypt-buffer (&optional encrypted-buffer)
-    "Decrypt ENCRYPTED-BUFFER in place.
+(defun agenix-decrypt-buffer (&optional encrypted-buffer)
+  "Decrypt ENCRYPTED-BUFFER in place.
 If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
-    (interactive
-     (when current-prefix-arg
-       (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
+  (interactive
+   (when current-prefix-arg
+     (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
 
-    (with-current-buffer (or encrypted-buffer (current-buffer))
-      (let ((decrypted (agenix--decrypt-buffer-to-str (current-buffer))))
-        ;; Replace buffer with decrypted content
-        (read-only-mode -1)
-        (erase-buffer)
-        (insert (agenix--decryption-result-str decrypted))
+  (with-current-buffer (or encrypted-buffer (current-buffer))
+    (let* ((encrypted-fp (buffer-file-name))
+           (raw-keys
+            (shell-command-to-string
+             (concat "nix-instantiate --strict --json --eval --expr "
+                     "'(import ./secrets.nix).\""
+                     (file-name-nondirectory encrypted-fp)
+                     "\".publicKeys' | "
+                     agenix-jq-program
+                     " -r '.[]'")))
+           (keys (butlast (split-string raw-keys "\n")))
+           (age-flags (list "--decrypt")))
 
-        ;; NOTE: Do we need it?
-        ;; (delete-backward-char 1) ; Remove newline at the end of age output
+      ;; Add all user's keys to the age command
+      (dolist (key-path agenix-key-files)
+        (when (file-exists-p (expand-file-name key-path))
+          (setq age-flags
+                (nconc age-flags (list "--identity" (expand-file-name key-path))))))
 
-        ;; Mark buffer as not modified
-        (set-buffer-modified-p nil)
+      ;; Add filepath to decrypt to the age command
+      (setq age-flags (nconc age-flags (list encrypted-fp)))
 
-        ;; Seamless cursor movement - jump back to the previous position in the decrypted buffer
-        (when agenix--decrypted-cursor
-          (goto-char agenix--decrypted-cursor))
+      (let ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
+        (if (= 0 (car age-res))
+            (progn
+              ;; Replace buffer with decrypted content
+              (read-only-mode -1)
+              (erase-buffer)
+              (insert (car (cdr age-res)))
 
-        (setq agenix--encrypted-fp (agenix--decryption-result-original-path decrypted))
-        (setq agenix--keys (agenix--decryption-result-keys decrypted)))))
+              ;; NOTE: Do we need it?
+              ;; (delete-backward-char 1) ; Remove newline at the end of age output
+
+              ;; Mark buffer as not modified
+              (set-buffer-modified-p nil)
+
+              ;; Jump back to the previous position in the decrypted buffer
+              (when agenix--decrypted-cursor
+                (goto-char agenix--decrypted-cursor))
+
+              (setq agenix--encrypted-fp encrypted-fp)
+              (setq agenix--keys keys))
+
+          (error
+           (car (cdr age-res))))))))
 
 ;;;###autoload
 (defun agenix-save-decrypted (&optional unencrypted-buffer)
