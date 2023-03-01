@@ -49,26 +49,21 @@
 
 (defvar-local agenix--keys nil)
 
-(defvar-local agenix--decrypted-cursor nil)
-
 (defvar-local agenix--undo-list nil)
 
 (define-derived-mode agenix-mode text-mode "agenix"
   "Major mode for agenix files.
 Don't use directly, use `agenix-mode-if-with-secrtes-nix' to ensure that
 secres.nix exists."
-  (read-only-mode)
-  (agenix-decrypt-buffer)
+  (read-only-mode 1)
 
-  ;; Saving works by encrypting the buffer and writing it to the file, reading encryped back to the
-  ;; buffer, then usual emacs save-buffer is called which would be a noop, and buffer is decrypted
-  ;; again after saving is done.
-  (add-hook 'before-save-hook
-            (lambda ()
-              ;; Leave it as lambda, order matters here
-              (agenix-save-decrypted)
-              (agenix-revert-encrypted)))
-  (add-hook 'after-save-hook 'agenix-decrypt-buffer)
+  (agenix-decrypt-buffer)
+  (goto-char (point-min))
+  (setq buffer-undo-list nil)
+
+  (setq require-final-newline nil)
+  (setq buffer-auto-save-file-name nil)
+  (setq write-contents-functions '(agenix-save-decrypted))
 
   ;; Reverting loads encrypted file back to the buffer, so we need to decrypt it
   (add-hook 'after-revert-hook 'agenix-decrypt-buffer))
@@ -78,20 +73,6 @@ secres.nix exists."
   (with-temp-buffer
     (list (apply 'call-process program nil (current-buffer) nil args)
           (buffer-string))))
-
-;;;###autoload
-(defun agenix-revert-encrypted (&optional buffer)
-  "Interenal use only.
-Revert BUFFER to the state before decryption."
-  (interactive
-   (when current-prefix-arg
-     (list (read-buffer "Revert buffer: " (current-buffer) t))))
-  (with-current-buffer (or buffer (current-buffer))
-    (setq agenix--decrypted-cursor (point))
-    (setq agenix--undo-list buffer-undo-list)
-    (erase-buffer)
-    (insert-file-contents agenix--encrypted-fp)
-    (read-only-mode 1)))
 
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
@@ -130,17 +111,11 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
               (read-only-mode -1)
               (erase-buffer)
               (insert (car (cdr age-res)))
-              (setq buffer-undo-list agenix--undo-list)
-
-              ;; NOTE: Do we need it?
-              ;; (delete-backward-char 1) ; Remove newline at the end of age output
 
               ;; Mark buffer as not modified
               (set-buffer-modified-p nil)
 
-              ;; Jump back to the previous position in the decrypted buffer
-              (when agenix--decrypted-cursor
-                (goto-char agenix--decrypted-cursor))
+              (setq buffer-undo-list agenix--undo-list)
 
               (setq agenix--encrypted-fp encrypted-fp)
               (setq agenix--keys keys))
@@ -175,7 +150,11 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
                           age-flags)
                    (buffer-string)))))
           (when (/= 0 (car age-res))
-            (error (car (cdr age-res)))))))))
+            (error (car (cdr age-res))))
+          (setq agenix--undo-list buffer-undo-list)
+          (revert-buffer :ignore-auto :noconfirm :preserve-modes)
+          (set-buffer-modified-p nil)
+          t)))))
 
 ;;;###autoload
 (defun agenix-mode-if-with-secrtes-nix ()
