@@ -4,13 +4,20 @@
 
 ** Usage
 
-*** Decrypt a file
+=agenix.el= enables fully transparent =agenix= secrets editing. Open your =agenix= secret as any other file, make changes and save, it'll be automatically encrypted back and saved.
 
-Inside buffer with encrypted file run =M-x agenix-decrypt-this-buffer=. It will open a new buffer with decrypted content.
+** Installation
 
-*** Encrypt a file
+Using =straight.el=:
 
-Inside buffer opened previously run =M-x agenix-encrypt-this-buffer=. It will encrypt content of the buffer, override previously decrypted file and close a buffer.
+#+begin_src emacs-lisp
+  (use-package agenix
+    :straight
+    ( :host github
+      :repo "t4ccer/agenix.el"
+      :branch "main"
+      :files ("*.el")))
+#+end_src
 
 ** License
 

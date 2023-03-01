@@ -1,12 +1,12 @@
 ;;; agenix.el --- Decrypt and encrypt agenix secrets  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2022 Tomasz Maciosowski (t4ccer)
+;; Copyright (C) 2022-2023 Tomasz Maciosowski (t4ccer)
 
 ;; Author: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/t4ccer/agenix.el
-;; Version: 0.4
+;; Version: 1.0
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -25,15 +25,8 @@
 
 ;;; Commentary:
 
-;; Decrypt a file
-
-;; Inside buffer with encrypted file run =M-x agenix-decrypt-buffer=. It will open a new buffer
-;; with decrypted content.
-
-;; Encrypt a file
-
-;; Inside buffer opened previously run =M-x agenix-encrypt-buffer=. It will encrypt content of
-;; the buffer, override previously decrypted file and close a buffer.
+;; Fully transaprent editing of agenix secrets. Open a file, edit it, save it and it will be
+;; encrypted automatically.
 
 ;;; Code:
 
@@ -47,20 +40,36 @@
   :group 'agenix
   :type 'string)
 
+(defcustom agenix-key-files '("~/.ssh/id_ed25519" "~/.ssh/id_rsa")
+  "List of age key files."
+  :group 'agenix
+  :type '(repeat string))
+
 (defvar-local agenix--encrypted-fp nil)
 
 (defvar-local agenix--keys nil)
 
-(defvar-local agenix--encrypted-buf nil)
+(defvar-local agenix--decrypted-cursor nil)
 
-(defvar-local agenix--init nil)
+(define-derived-mode agenix-mode text-mode "agenix"
+  "Major mode for agenix files.
+Don't use directly, use `agenix-mode-if-with-secrtes-nix' to ensure that
+secres.nix exists."
+  (read-only-mode)
+  (agenix-decrypt-buffer)
 
-(define-derived-mode agenix-encrypted-mode text-mode "Age[encrypted]"
-  "Major mode for encrypted age files."
-  (read-only-mode))
+  ;; Saving works by encrypting the buffer and writing it to the file, reading encryped back to the
+  ;; buffer, then usual emacs save-buffer is called which would be a noop, and buffer is decrypted
+  ;; again after saving is done.
+  (add-hook 'before-save-hook
+            (lambda ()
+              ;; Leave it as lambda, order matters here
+              (agenix-save-decrypted)
+              (agenix-revert-encrypted)))
+  (add-hook 'after-save-hook 'agenix-decrypt-buffer)
 
-(define-derived-mode agenix-decrypted-mode text-mode "Age[decrypted]"
-  "Major mode for decrypted age files.")
+  ;; Reverting loads encrypted file back to the buffer, so we need to decrypt it
+  (add-hook 'after-revert-hook 'agenix-decrypt-buffer))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
@@ -68,19 +77,13 @@
     (list (apply 'call-process program nil (current-buffer) nil args)
           (buffer-string))))
 
-(define-obsolete-function-alias 'agenix-decrypt-this-buffer 'agenix-decrypt-buffer "0.2.1"
-  "Decrypt current buffer in a new buffer.")
+(cl-defstruct agenix--decryption-result str original-path keys)
 
 ;;;###autoload
-(defun agenix-decrypt-buffer (&optional encrypted-buffer)
-  "Decrypt ENCRYPTED-BUFFER in a new buffer.
-If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
-  (interactive
-   (when current-prefix-arg
-     (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
-  (with-current-buffer (or encrypted-buffer (current-buffer))
-    (let* ((new-name (concat "*agenix[" (buffer-name) "]*"))
-           (encrypted-fp (buffer-file-name))
+(defun agenix--decrypt-buffer-to-str (encrypted-buffer)
+  "Decrypt ENCRYPTED-BUFFER and return 'agenix--decryption-result' struct."
+  (with-current-buffer encrypted-buffer
+    (let* ((encrypted-fp (buffer-file-name))
            (raw-keys (shell-command-to-string
                       (concat "nix-instantiate --strict --json --eval --expr "
                               "'(import ./secrets.nix).\""
@@ -91,67 +94,100 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
            (keys (butlast (split-string raw-keys "\n")))
            (age-flags (list "--decrypt")))
 
-      (when (file-exists-p "~/.ssh/id_ed25519")
-        (setq age-flags
-              (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_ed25519")))))
-
-      (when (file-exists-p "~/.ssh/id_rsa")
-        (setq age-flags (nconc age-flags (list "--identity" (expand-file-name "~/.ssh/id_rsa")))))
+      (dolist (key-path agenix-key-files)
+        (when (file-exists-p (expand-file-name key-path))
+          (setq age-flags
+                (nconc age-flags (list "--identity" (expand-file-name key-path))))))
 
       (setq age-flags (nconc age-flags (list encrypted-fp)))
 
       (let* ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
         (if (= 0 (car age-res))
-            (progn
-              (switch-to-buffer (generate-new-buffer new-name))
-              (agenix-decrypted-mode)
-              (setq buffer-auto-save-file-name nil)
-              (insert (car (cdr age-res)))
-              (setq agenix--encrypted-fp encrypted-fp)
-              (setq agenix--keys keys)
-              (setq agenix--encrypted-buf encrypted-buffer)
-              (setq agenix--init (buffer-string))
-              (goto-char (point-min)))
-          (error (car (cdr age-res))))))))
-
-(define-obsolete-function-alias 'agenix-encrypt-this-buffer 'agenix-encrypt-buffer "0.2.1"
-  "Encrypt current buffer in a new buffer.")
+            (make-agenix--decryption-result
+             :str (car (cdr age-res))
+             :original-path encrypted-fp
+             :keys keys)
+          (error
+           (car (cdr age-res))))))))
 
 ;;;###autoload
-(defun agenix-encrypt-buffer (&optional unencrypted-buffer)
-  "Encrypt UNENCRYPTED-BUFFER in a new buffer.
+(defun agenix-revert-encrypted (&optional buffer)
+  "Interenal use only.
+Revert BUFFER to the state before decryption."
+  (interactive
+   (when current-prefix-arg
+     (list (read-buffer "Revert buffer: " (current-buffer) t))))
+  (with-current-buffer (or buffer (current-buffer))
+    (setq agenix--decrypted-cursor (point))
+    (erase-buffer)
+    (insert-file-contents agenix--encrypted-fp)
+    (read-only-mode 1)))
+
+;;;###autoload
+  (defun agenix-decrypt-buffer (&optional encrypted-buffer)
+    "Decrypt ENCRYPTED-BUFFER in place.
+If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
+    (interactive
+     (when current-prefix-arg
+       (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
+
+    (with-current-buffer (or encrypted-buffer (current-buffer))
+      (let ((decrypted (agenix--decrypt-buffer-to-str (current-buffer))))
+        ;; Replace buffer with decrypted content
+        (read-only-mode -1)
+        (erase-buffer)
+        (insert (agenix--decryption-result-str decrypted))
+
+        ;; NOTE: Do we need it?
+        ;; (delete-backward-char 1) ; Remove newline at the end of age output
+
+        ;; Mark buffer as not modified
+        (set-buffer-modified-p nil)
+
+        ;; Seamless cursor movement - jump back to the previous position in the decrypted buffer
+        (when agenix--decrypted-cursor
+          (goto-char agenix--decrypted-cursor))
+
+        (setq agenix--encrypted-fp (agenix--decryption-result-original-path decrypted))
+        (setq agenix--keys (agenix--decryption-result-keys decrypted)))))
+
+;;;###autoload
+(defun agenix-save-decrypted (&optional unencrypted-buffer)
+  "Encrypt UNENCRYPTED-BUFFER back to the original .age file.
 If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
   (interactive
    (when current-prefix-arg
      (list (read-buffer "Unencrypted buffer: " (current-buffer) t))))
   (with-current-buffer (or unencrypted-buffer (current-buffer))
     (let* ((age-flags (list "--encrypt")))
-      (if (string= (buffer-string) agenix--init)
-          (let ((decrypted-buf (current-buffer)))
-            (switch-to-buffer agenix--encrypted-buf)
-            (kill-buffer decrypted-buf))
-        (progn
-          (dolist (k agenix--keys)
-            (setq age-flags (nconc age-flags (list "--recipient" k))))
-          (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
-          (let* ((decrypted-text (buffer-string))
-                 (age-res
-                  (with-temp-buffer
-                    (list
-                     (apply 'call-process-region
-                            decrypted-text
-                            nil
-                            agenix-age-program
-                            nil
-                            (current-buffer)
-                            t
-                            age-flags)
-                     (buffer-string)))))
-            (if (= 0 (car age-res))
-                (let ((decrypted-buf (current-buffer)))
-                  (switch-to-buffer agenix--encrypted-buf)
-                  (kill-buffer decrypted-buf))
-              (error (car (cdr age-res))))))))))
+      (progn
+        (dolist (k agenix--keys)
+          (setq age-flags (nconc age-flags (list "--recipient" k))))
+        (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
+        (let* ((decrypted-text (buffer-string))
+               (age-res
+                (with-temp-buffer
+                  (list
+                   (apply 'call-process-region
+                          decrypted-text
+                          nil
+                          agenix-age-program
+                          nil
+                          (current-buffer)
+                          t
+                          age-flags)
+                   (buffer-string)))))
+          (when (/= 0 (car age-res))
+            (error (car (cdr age-res)))))))))
+
+;;;###autoload
+(defun agenix-mode-if-with-secrtes-nix ()
+  "Enable `agenix-mode' if the current buffer is in a directory with secrets.nix."
+  (interactive)
+  (when (file-exists-p "secrets.nix")
+    (agenix-mode)))
+
+(add-to-list 'auto-mode-alist '("\\.age" . agenix-mode-if-with-secrtes-nix))
 
 (provide 'agenix)
 ;;; agenix.el ends here
