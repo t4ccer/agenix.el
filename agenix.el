@@ -103,25 +103,32 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
 
       ;; Add filepath to decrypt to the age command
       (setq age-flags (nconc age-flags (list encrypted-fp)))
+      (setq agenix--encrypted-fp encrypted-fp)
+      (setq agenix--keys keys)
 
-      (let ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags)))
-        (if (= 0 (car age-res))
-            (progn
-              ;; Replace buffer with decrypted content
-              (read-only-mode -1)
-              (erase-buffer)
-              (insert (car (cdr age-res)))
+      ;; Check if file already exists
+      (if (not (file-exists-p (buffer-file-name)))
+          (progn
+            (message "Not decrypting. File %s does not exist and will be created when you will \
+save this buffer." (buffer-file-name))
+            (read-only-mode -1))
+        (progn
+          ;; Call `age`, decrypt buffer and replace the content
+          (let*
+              ((age-res (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags))
+               (age-exit-code (car age-res))
+               (age-output (car (cdr age-res))))
+            (if (= 0 age-exit-code)
+                (progn
+                  ;; Replace buffer with decrypted content
+                  (read-only-mode -1)
+                  (erase-buffer)
+                  (insert age-output)
 
-              ;; Mark buffer as not modified
-              (set-buffer-modified-p nil)
-
-              (setq buffer-undo-list agenix--undo-list)
-
-              (setq agenix--encrypted-fp encrypted-fp)
-              (setq agenix--keys keys))
-
-          (error
-           (car (cdr age-res))))))))
+                  ;; Mark buffer as not modified
+                  (set-buffer-modified-p nil)
+                  (setq buffer-undo-list agenix--undo-list))
+              (error age-output))))))))
 
 ;;;###autoload
 (defun agenix-save-decrypted (&optional unencrypted-buffer)
