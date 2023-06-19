@@ -66,7 +66,8 @@ secres.nix exists."
   (setq write-contents-functions '(agenix-save-decrypted))
 
   ;; Reverting loads encrypted file back to the buffer, so we need to decrypt it
-  (add-hook 'after-revert-hook 'agenix-decrypt-buffer))
+  (add-hook 'after-revert-hook
+            (lambda () (when (eq major-mode 'agenix-mode) (agenix-decrypt-buffer)))))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
