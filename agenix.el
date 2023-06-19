@@ -4,7 +4,7 @@
 
 ;; Author: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
-;; Package-Requires: ((emacs "25.1"))
+;; Package-Requires: ((emacs "27.1"))
 ;; URL: https://github.com/t4ccer/agenix.el
 ;; Version: 1.0
 
@@ -32,11 +32,6 @@
 
 (defcustom agenix-age-program "age"
   "The age program."
-  :group 'agenix
-  :type 'string)
-
-(defcustom agenix-jq-program "jq"
-  "The jq program."
   :group 'agenix
   :type 'string)
 
@@ -96,14 +91,7 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
           (warn (format "Nix evalutation error.
 Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output))
-        (let* ((raw-keys ;; TODO: Don't use `jq'
-                (shell-command-to-string
-                 (concat "echo '"
-                         nix-output
-                         "' | "
-                         agenix-jq-program
-                         " -r '.[]'")))
-               (keys (butlast (split-string raw-keys "\n")))
+        (let* ((keys (json-parse-string nix-output :array-type 'list))
                (age-flags (list "--decrypt")))
 
           ;; Add all user's keys to the age command
