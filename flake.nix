@@ -13,11 +13,6 @@
       url = "github:sellout/bash-strict-mode";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    home-manager = {
-      url = "github:nix-community/home-manager/release-22.11";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs = inputs:
@@ -34,26 +29,6 @@
           emacs = final: prev: efinal: eprev: {
             agenix = inputs.self.packages.${final.system}.agenix-el;
           };
-        };
-
-        homeConfigurations.example = inputs.home-manager.lib.homeManagerConfiguration {
-          pkgs = import inputs.nixpkgs {
-            system = inputs.flake-utils.lib.system.aarch64-darwin;
-            ## Users will refer to `inputs.agenix-el.overlays.default` instead.
-            overlays = [inputs.self.overlays.default];
-          };
-
-          modules = [
-            ./nix/home-manager-example.nix
-            {
-              # These attributes are simply required by home-manager.
-              home = {
-                homeDirectory = /tmp/agenix-el-example;
-                stateVersion = "22.11";
-                username = "agenix-el-example-user";
-              };
-            }
-          ];
         };
       };
       perSystem = {
