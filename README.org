@@ -6,6 +6,10 @@
 
 =agenix.el= enables fully transparent =agenix= secrets editing. Open your =agenix= secret as any other file, make changes and save, it'll be automatically encrypted back and saved.
 
+** Prerequisites
+
+You need to have =age= binary in =PATH=, or set =agenix-age-program= variable to path to the executable. If you wish to use =direnv= to set that for you, see [[*Direnv Integration][integration section]]
+
 ** Installation
 
 Using =straight.el=:
@@ -17,6 +21,20 @@ Using =straight.el=:
       :repo "t4ccer/agenix.el"
       :branch "main"
       :files ("*.el")))
+#+end_src
+
+*** Direnv Integration
+
+If you wish to use =direnv= using =envrc= package to setup =age= binary path for you, you need to add it to =agenix-pre-mode-hook=. Note that setting =envrc-global-mode= is not enough because minor modes are run after major mode.
+
+#+begin_src emacs-lisp
+  ;; With use-package
+  (use-package envrc
+    :ensure t
+    :hook (agenix-pre-mode . envrc-mode))
+
+  ;; Without use-package
+  (add-hook 'agenix-pre-mode-hook #'envrc-mode)
 #+end_src
 
 ** License

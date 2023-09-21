@@ -40,6 +40,11 @@
   :group 'agenix
   :type '(repeat string))
 
+(defcustom agenix-pre-mode nil
+  "Hook to run before entering `agenix-mode'. Can be used to set up age binary path."
+  :group 'agenix
+  :type 'hook)
+
 (defvar-local agenix--encrypted-fp nil)
 
 (defvar-local agenix--keys nil)
@@ -51,6 +56,8 @@
 Don't use directly, use `agenix-mode-if-with-secrtes-nix' to ensure that
 secres.nix exists."
   (read-only-mode 1)
+
+  (run-hooks 'agenix-pre-mode-hook)
 
   (agenix-decrypt-buffer)
   (goto-char (point-min))
@@ -64,11 +71,24 @@ secres.nix exists."
   (add-hook 'after-revert-hook
             (lambda () (when (eq major-mode 'agenix-mode) (agenix-decrypt-buffer)))))
 
+(defun agenix--buffer-string* (buffer)
+  "Like `buffer-string' but read from BUFFER parameter."
+  (with-current-buffer buffer
+    (buffer-substring-no-properties (point-min) (point-max))))
+
+(defun agenix--with-temp-buffer (func)
+  "Like `with-temp-buffer' but doesn't actually switch the buffer.
+FUNC takes a temporary buffer that will be disposed after the call."
+  (let* ((age-buf (generate-new-buffer "*age-buf*"))
+         (res (funcall func age-buf)))
+    (kill-buffer age-buf)
+    res))
+
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
-  (with-temp-buffer
-    (list (apply 'call-process program nil (current-buffer) nil args)
-          (buffer-string))))
+  (agenix--with-temp-buffer
+   (lambda (buf) (list (apply 'call-process program nil buf nil args)
+                       (agenix--buffer-string* buf)))))
 
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
@@ -144,17 +164,17 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
         (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
         (let* ((decrypted-text (buffer-string))
                (age-res
-                (with-temp-buffer
-                  (list
-                   (apply 'call-process-region
-                          decrypted-text
-                          nil
-                          agenix-age-program
-                          nil
-                          (current-buffer)
-                          t
-                          age-flags)
-                   (buffer-string)))))
+                (agenix--with-temp-buffer
+                 (lambda (buf)
+                   (list
+                    (apply 'call-process-region
+                           decrypted-text nil
+                           agenix-age-program
+                           nil
+                           buf
+                           t
+                           age-flags)
+                    (agenix--buffer-string* buf))))))
           (when (/= 0 (car age-res))
             (error (car (cdr age-res))))
           (setq agenix--undo-list buffer-undo-list)
