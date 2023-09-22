@@ -189,7 +189,8 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
   (when (file-exists-p "secrets.nix")
     (agenix-mode)))
 
-(add-to-list 'auto-mode-alist '("\\.age" . agenix-mode-if-with-secrtes-nix))
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.age\\'" . agenix-mode-if-with-secrtes-nix))
 
 (provide 'agenix)
 ;;; agenix.el ends here
