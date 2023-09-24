@@ -41,7 +41,8 @@
   :type '(repeat string))
 
 (defcustom agenix-pre-mode nil
-  "Hook to run before entering `agenix-mode'. Can be used to set up age binary path."
+  "Hook to run before entering `agenix-mode'.
+Can be used to set up age binary path."
   :group 'agenix
   :type 'hook)
 
@@ -87,7 +88,7 @@ FUNC takes a temporary buffer that will be disposed after the call."
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
   (agenix--with-temp-buffer
-   (lambda (buf) (list (apply 'call-process program nil buf nil args)
+   (lambda (buf) (list (apply #'call-process program nil buf nil args)
                        (agenix--buffer-string* buf)))))
 
 ;;;###autoload
@@ -99,7 +100,7 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
      (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
 
   (with-current-buffer (or encrypted-buffer (current-buffer))
-    (let* ((nix-res (apply 'agenix--process-exit-code-and-output "nix-instantiate"
+    (let* ((nix-res (apply #'agenix--process-exit-code-and-output "nix-instantiate"
                            (list "--strict" "--json" "--eval" "--expr"
                                  (format
                                   "(import ./secrets.nix).\"%s\".publicKeys"
@@ -108,9 +109,9 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
            (nix-output (car (cdr nix-res))))
 
       (if (/= nix-exit-code 0)
-          (warn (format "Nix evalutation error.
+          (warn "Nix evalutation error.
 Probably file %s is not declared as a secret in 'secrets.nix' file.
-Error: %s" (buffer-file-name) nix-output))
+Error: %s" (buffer-file-name) nix-output)
         (let* ((keys (json-parse-string nix-output :array-type 'list))
                (age-flags (list "--decrypt")))
 
@@ -133,7 +134,7 @@ will save this buffer." (buffer-file-name))
                 (read-only-mode -1))
             (let*
                 ((age-res
-                  (apply 'agenix--process-exit-code-and-output agenix-age-program age-flags))
+                  (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
                  (age-exit-code (car age-res))
                  (age-output (car (cdr age-res))))
 
@@ -167,7 +168,7 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
                 (agenix--with-temp-buffer
                  (lambda (buf)
                    (list
-                    (apply 'call-process-region
+                    (apply #'call-process-region
                            decrypted-text nil
                            agenix-age-program
                            nil
