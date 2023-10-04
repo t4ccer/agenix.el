@@ -25,7 +25,7 @@
 
 ;;; Commentary:
 
-;; Fully transaprent editing of agenix secrets. Open a file, edit it, save it and it will be
+;; Fully transparent editing of agenix secrets. Open a file, edit it, save it and it will be
 ;; encrypted automatically.
 
 ;;; Code:
@@ -40,7 +40,7 @@
   :group 'agenix
   :type '(repeat string))
 
-(defcustom agenix-pre-mode nil
+(defcustom agenix-pre-mode-hook nil
   "Hook to run before entering `agenix-mode'.
 Can be used to set up age binary path."
   :group 'agenix
@@ -54,8 +54,8 @@ Can be used to set up age binary path."
 
 (define-derived-mode agenix-mode text-mode "agenix"
   "Major mode for agenix files.
-Don't use directly, use `agenix-mode-if-with-secrtes-nix' to ensure that
-secres.nix exists."
+Don't use directly, use `agenix-mode-if-with-secrets-nix' to ensure that
+secrets.nix exists."
   (read-only-mode 1)
 
   (run-hooks 'agenix-pre-mode-hook)
@@ -109,7 +109,7 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
            (nix-output (car (cdr nix-res))))
 
       (if (/= nix-exit-code 0)
-          (warn "Nix evalutation error.
+          (warn "Nix evaluation error.
 Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output)
         (let* ((keys (json-parse-string nix-output :array-type 'list))
@@ -121,7 +121,7 @@ Error: %s" (buffer-file-name) nix-output)
               (setq age-flags
                     (nconc age-flags (list "--identity" (expand-file-name key-path))))))
 
-          ;; Add filepath to decrypt to the age command
+          ;; Add file-path to decrypt to the age command
           (setq age-flags (nconc age-flags (list (buffer-file-name))))
           (setq agenix--encrypted-fp (buffer-file-name))
           (setq agenix--keys keys)
@@ -184,14 +184,14 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
           t)))))
 
 ;;;###autoload
-(defun agenix-mode-if-with-secrtes-nix ()
+(defun agenix-mode-if-with-secrets-nix ()
   "Enable `agenix-mode' if the current buffer is in a directory with secrets.nix."
   (interactive)
   (when (file-exists-p "secrets.nix")
     (agenix-mode)))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist '("\\.age\\'" . agenix-mode-if-with-secrtes-nix))
+(add-to-list 'auto-mode-alist '("\\.age\\'" . agenix-mode-if-with-secrets-nix))
 
 (provide 'agenix)
 ;;; agenix.el ends here
