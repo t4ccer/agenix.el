@@ -52,6 +52,8 @@ Can be used to set up age binary path."
 
 (defvar-local agenix--undo-list nil)
 
+(defvar-local agenix--point nil)
+
 (define-derived-mode agenix-mode text-mode "agenix"
   "Major mode for agenix files.
 Don't use directly, use `agenix-mode-if-with-secrets-nix' to ensure that
@@ -148,7 +150,9 @@ will save this buffer." (buffer-file-name))
                     ;; Mark buffer as not modified
                     (set-buffer-modified-p nil)
                     (setq buffer-undo-list agenix--undo-list))
-                (error age-output)))))))))
+                (error age-output))))
+          (when agenix--point
+            (goto-char agenix--point)))))))
 
 ;;;###autoload
 (defun agenix-save-decrypted (&optional unencrypted-buffer)
@@ -178,6 +182,7 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
                     (agenix--buffer-string* buf))))))
           (when (/= 0 (car age-res))
             (error (car (cdr age-res))))
+          (setq agenix--point (point))
           (setq agenix--undo-list buffer-undo-list)
           (revert-buffer :ignore-auto :noconfirm :preserve-modes)
           (set-buffer-modified-p nil)
