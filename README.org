@@ -12,15 +12,18 @@ You need to have =age= binary in =PATH=, or set =agenix-age-program= variable to
 
 ** Installation
 
-Using =straight.el=:
+Package is available on [[https://melpa.org/#/agenix][Melpa]], so you can install it as usual.
 
 #+begin_src emacs-lisp
+  ;; Option 1: plain
+  (require 'package)
+  (add-to-list 'package-archives
+               '("melpa" . "https://melpa.org/packages/") t)
+  (package-install 'agenix)
+
+  ;; Option 2: use-package
   (use-package agenix
-    :straight
-    ( :host github
-      :repo "t4ccer/agenix.el"
-      :branch "main"
-      :files ("*.el")))
+    :ensure t)
 #+end_src
 
 *** Direnv Integration
