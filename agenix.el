@@ -105,8 +105,9 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
     (let* ((nix-res (apply #'agenix--process-exit-code-and-output "nix-instantiate"
                            (list "--strict" "--json" "--eval" "--expr"
                                  (format
-                                  "(import ./secrets.nix).\"%s\".publicKeys"
-                                  (file-name-nondirectory (buffer-file-name))))))
+                                  "(import \"%s\").\"%s\".publicKeys"
+                                  (agenix-locate-secrets-nix buffer-file-name)
+                                  (agenix-path-relative-to-secrets-nix (buffer-file-name))))))
            (nix-exit-code (car nix-res))
            (nix-output (car (cdr nix-res))))
 
@@ -188,11 +189,25 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
           (set-buffer-modified-p nil)
           t)))))
 
+(defun agenix-secrets-base-dir (pathname)
+  "Return the directory containing the secrets.nix file, if one exists."
+  (locate-dominating-file pathname "secrets.nix"))
+
+(defun agenix-locate-secrets-nix (pathname)
+  "Return the absolute path to secrets.nix in any containing directory."
+  (when-let (dir (agenix-secrets-base-dir pathname))
+    (expand-file-name "secrets.nix" dir)))
+
+(defun agenix-path-relative-to-secrets-nix (pathname)
+  "Converts an absolute pathname to a pathname relative to the secrets.nix pathname."
+  (when-let (dir (agenix-secrets-base-dir pathname))
+    (file-relative-name pathname dir)))
+
 ;;;###autoload
 (defun agenix-mode-if-with-secrets-nix ()
   "Enable `agenix-mode' if the current buffer is in a directory with secrets.nix."
   (interactive)
-  (when (file-exists-p "secrets.nix")
+  (when (agenix-locate-secrets-nix buffer-file-name)
     (agenix-mode)))
 
 ;;;###autoload
