@@ -190,16 +190,16 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
           t)))))
 
 (defun agenix-secrets-base-dir (pathname)
-  "Return the directory containing the secrets.nix file, if one exists."
+  "Return the directory above PATHNAME containing secrets.nix file, if one exists."
   (locate-dominating-file pathname "secrets.nix"))
 
 (defun agenix-locate-secrets-nix (pathname)
-  "Return the absolute path to secrets.nix in any containing directory."
+  "Return the absolute path to secrets.nix in any directory containing PATHNAME."
   (when-let (dir (agenix-secrets-base-dir pathname))
     (expand-file-name "secrets.nix" dir)))
 
 (defun agenix-path-relative-to-secrets-nix (pathname)
-  "Converts an absolute pathname to a pathname relative to the secrets.nix pathname."
+  "Convert absolute PATHNAME to a name relative to its secrets.nix."
   (when-let (dir (agenix-secrets-base-dir pathname))
     (file-relative-name pathname dir)))
 
