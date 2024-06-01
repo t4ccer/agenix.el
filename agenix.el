@@ -38,7 +38,8 @@
 (defcustom agenix-key-files '("~/.ssh/id_ed25519" "~/.ssh/id_rsa")
   "List of age key files."
   :group 'agenix
-  :type '(repeat string))
+  :type '(repeat (choice (string :tag "Pathname to a key file")
+                         (function :tag "Function returning the pathname to a key file"))))
 
 (defcustom agenix-pre-mode-hook nil
   "Hook to run before entering `agenix-mode'.
@@ -118,10 +119,12 @@ Error: %s" (buffer-file-name) nix-output)
                (age-flags (list "--decrypt")))
 
           ;; Add all user's keys to the age command
-          (dolist (key-path agenix-key-files)
-            (when (file-exists-p (expand-file-name key-path))
-              (setq age-flags
-                    (nconc age-flags (list "--identity" (expand-file-name key-path))))))
+          (dolist (keyspec agenix-key-files)
+            (let ((key-path (cond ((stringp keyspec) keyspec)
+                                  (t (funcall keyspec)))))
+              (when (and key-path (file-exists-p (expand-file-name key-path)))
+                (setq age-flags
+                      (nconc age-flags (list "--identity" (expand-file-name key-path)))))))
 
           ;; Add file-path to decrypt to the age command
           (setq age-flags (nconc age-flags (list (buffer-file-name))))
