@@ -124,6 +124,10 @@
 
               buildPhase = ''
                 runHook preBuild
+                ## TODO: Currently needed to make a temp file in
+                ##      `eldev--create-internal-pseudoarchive-descriptor`.
+                export HOME="$(mktemp --directory --tmpdir fake-home.XXXXXX)"
+                mkdir -p "$HOME/.cache/eldev"
                 eldev doctor
                 runHook postBuild
               '';
