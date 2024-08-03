@@ -22,7 +22,7 @@
         overlays = {
           default = final: prev: {
             emacsPackagesFor = emacs:
-              (prev.emacsPackagesFor emacs).overrideScope'
+              (prev.emacsPackagesFor emacs).overrideScope
               (inputs.self.overlays.emacs final prev);
           };
 
