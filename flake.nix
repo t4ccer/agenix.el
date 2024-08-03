@@ -13,23 +13,44 @@
       url = "github:sellout/bash-strict-mode";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    home-manager = {
+      url = "github:nix-community/home-manager/release-24.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = inputs:
+  outputs = inputs: let
+    systems = inputs.nixpkgs.lib.systems.flakeExposed;
+  in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = inputs.nixpkgs.lib.systems.flakeExposed;
+      inherit systems;
       flake = {
         overlays = {
           default = final: prev: {
             emacsPackagesFor = emacs:
               (prev.emacsPackagesFor emacs).overrideScope
-              (inputs.self.overlays.emacs final prev);
-          };
-
-          emacs = final: prev: efinal: eprev: {
-            agenix = inputs.self.packages.${final.system}.agenix-el;
+              (inputs.self.lib.overlays.emacs final prev);
           };
         };
+
+        lib.overlays.emacs = final: prev: efinal: eprev: {
+          agenix = inputs.self.packages.${final.system}.agenix-el;
+        };
+
+        homeConfigurations =
+          builtins.listToAttrs
+          (builtins.map (system: {
+              name = "${system}-example";
+              value = inputs.home-manager.lib.homeManagerConfiguration {
+                pkgs = import inputs.nixpkgs {
+                  inherit system;
+                  overlays = [inputs.self.overlays.default];
+                };
+                modules = [./nix/home.nix];
+              };
+            })
+            systems);
       };
       perSystem = {
         config,
