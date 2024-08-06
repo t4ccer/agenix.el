@@ -109,6 +109,18 @@ See also https://security.stackexchange.com/a/245767/318401."
 (defun agenix--prompt-password (identity-file)
   "Prompt for the password of IDENTITY-FILE."
   (read-passwd (format "Password for %s: " identity-file)))
+
+(defun agenix--create-temp-identity (identity-path password)
+  "Create a temporary copy of IDENTITY-PATH and remove its password protection.
+PASSWORD is the current password of the identity file.
+See also https://stackoverflow.com/a/112409/5616591.''"
+  (let* ((temp-file (make-temp-file "agenix-temp-identity"))
+         (copy-cmd (format "cp %s %s" identity-path temp-file))
+         (rekey-cmd (format "ssh-keygen -p -P \"%s\" -N \"\" -f %s" password temp-file)))
+    (shell-command copy-cmd)
+    (shell-command rekey-cmd)
+    temp-file))
+
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
   (let ((identity-path (agenix--extract-identity-path args)))
