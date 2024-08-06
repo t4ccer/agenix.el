@@ -99,6 +99,12 @@ Check if the file exists and is readable."
             identity-path
           (error "Identity file %s does not exist or is not readable" identity-path))))))
 
+(defun agenix--identity-protected-p (identity-path)
+  "Check if the identity file at IDENTITY-PATH is password protected.
+Returns t if the file is protected, nil if it's unprotected.
+See also https://security.stackexchange.com/a/245767/318401."
+  (/= 0 (call-process "ssh-keygen" nil nil nil
+                      "-y" "-P" "" "-f" identity-path)))
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
   (let ((identity-path (agenix--extract-identity-path args)))
