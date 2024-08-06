@@ -30,6 +30,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
 (defcustom agenix-age-program "age"
   "The age program."
   :group 'agenix
@@ -122,11 +124,28 @@ See also https://stackoverflow.com/a/112409/5616591.''"
     temp-file))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
-  "Run PROGRAM with ARGS and return the exit code and output in a list."
-  (let ((identity-path (agenix--extract-identity-path args)))
-    (agenix--with-temp-buffer
-     (lambda (buf) (list (apply #'call-process program nil buf nil args)
-                         (agenix--buffer-string* buf))))))
+  "Run PROGRAM with ARGS and return the exit code and output in a list.
+However, run additional logic for password-protected identity files.
+In particular: First find the identity file from the args and check whether it
+exists, is readable, and then whether it is password protected. If it is not
+password protected, proceed to make the program call. However, if it is password
+protected, prompt the user for the password. Then, copy the private key into a
+tmpfile and remove the password from the private key in this tmpfile. Finally,
+pass this tmpfile as the identity file, make the program call, and then remove
+the tmpfile again."
+  (let* ((identity-path (agenix--extract-identity-path args))
+         (temp-identity-path nil))
+    (when identity-path
+      (when (agenix--identity-protected-p identity-path)
+        (let ((password (agenix--prompt-password identity-path)))
+          (setq temp-identity-path (agenix--create-temp-identity identity-path password))
+          (setq args (cl-substitute temp-identity-path identity-path args :test #'string=)))))
+    (unwind-protect  ;; Make sure we always remove the temp-identity-path
+        (agenix--with-temp-buffer
+         (lambda (buf) (list (apply #'call-process program nil buf nil args)
+                             (agenix--buffer-string* buf))))
+      (when temp-identity-path
+        (delete-file temp-identity-path)))))
 
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
