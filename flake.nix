@@ -21,7 +21,13 @@
   };
 
   outputs = inputs: let
-    systems = inputs.nixpkgs.lib.systems.flakeExposed;
+    systems = [
+      "aarch64-darwin"
+      "aarch64-linux"
+      "i686-linux"
+      "x86_64-darwin"
+      "x86_64-linux"
+    ];
   in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       inherit systems;
