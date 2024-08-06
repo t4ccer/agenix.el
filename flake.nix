@@ -2,7 +2,7 @@
   description = "Decrypt and encrypt agenix secrets inside Emacs";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/release-24.05";
 
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
@@ -13,23 +13,50 @@
       url = "github:sellout/bash-strict-mode";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    home-manager = {
+      url = "github:nix-community/home-manager/release-24.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = inputs:
+  outputs = inputs: let
+    systems = [
+      "aarch64-darwin"
+      "aarch64-linux"
+      "i686-linux"
+      "x86_64-darwin"
+      "x86_64-linux"
+    ];
+  in
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = inputs.nixpkgs.lib.systems.flakeExposed;
+      inherit systems;
       flake = {
         overlays = {
           default = final: prev: {
             emacsPackagesFor = emacs:
-              (prev.emacsPackagesFor emacs).overrideScope'
-              (inputs.self.overlays.emacs final prev);
-          };
-
-          emacs = final: prev: efinal: eprev: {
-            agenix = inputs.self.packages.${final.system}.agenix-el;
+              (prev.emacsPackagesFor emacs).overrideScope
+              (inputs.self.lib.overlays.emacs final prev);
           };
         };
+
+        lib.overlays.emacs = final: prev: efinal: eprev: {
+          agenix = inputs.self.packages.${final.system}.agenix-el;
+        };
+
+        homeConfigurations =
+          builtins.listToAttrs
+          (builtins.map (system: {
+              name = "${system}-example";
+              value = inputs.home-manager.lib.homeManagerConfiguration {
+                pkgs = import inputs.nixpkgs {
+                  inherit system;
+                  overlays = [inputs.self.overlays.default];
+                };
+                modules = [./nix/home.nix];
+              };
+            })
+            systems);
       };
       perSystem = {
         config,
@@ -124,6 +151,10 @@
 
               buildPhase = ''
                 runHook preBuild
+                ## TODO: Currently needed to make a temp file in
+                ##      `eldev--create-internal-pseudoarchive-descriptor`.
+                export HOME="$(mktemp --directory --tmpdir fake-home.XXXXXX)"
+                mkdir -p "$HOME/.cache/eldev"
                 eldev doctor
                 runHook postBuild
               '';

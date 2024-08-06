@@ -1,0 +1,4 @@
+builds:
+  exclude:
+  # TODO: Remove once garnix-io/issues#94 is fixed.
+  - homeConfigurations.x86_64-darwin-example
