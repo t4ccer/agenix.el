@@ -105,6 +105,10 @@ Returns t if the file is protected, nil if it's unprotected.
 See also https://security.stackexchange.com/a/245767/318401."
   (/= 0 (call-process "ssh-keygen" nil nil nil
                       "-y" "-P" "" "-f" identity-path)))
+
+(defun agenix--prompt-password (identity-file)
+  "Prompt for the password of IDENTITY-FILE."
+  (read-passwd (format "Password for %s: " identity-file)))
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
   (let ((identity-path (agenix--extract-identity-path args)))
