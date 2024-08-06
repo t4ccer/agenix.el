@@ -88,11 +88,23 @@ FUNC takes a temporary buffer that will be disposed after the call."
     (kill-buffer age-buf)
     res))
 
+(defun agenix--extract-identity-path (args)
+  "Extract the path of the identity file from ARGS.
+Check if the file exists and is readable."
+  (let ((identity-index (or (cl-position "--identity" args :test 'string=)
+                            (cl-position "-i" args :test 'string=))))
+    (when identity-index
+      (let ((identity-path (nth (1+ identity-index) args)))
+        (if (and identity-path (file-readable-p identity-path))
+            identity-path
+          (error "Identity file %s does not exist or is not readable" identity-path))))))
+
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
-  (agenix--with-temp-buffer
-   (lambda (buf) (list (apply #'call-process program nil buf nil args)
-                       (agenix--buffer-string* buf)))))
+  (let ((identity-path (agenix--extract-identity-path args)))
+    (agenix--with-temp-buffer
+     (lambda (buf) (list (apply #'call-process program nil buf nil args)
+                         (agenix--buffer-string* buf))))))
 
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
