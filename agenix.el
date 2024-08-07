@@ -125,14 +125,13 @@ Please close the buffer and try again"))))
   "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
 Called as part of AGENIX-DECRYPT-BUFFER which sets the buffer and some variables,
 and does some more validation."
-  (let* ((filtered-cleartext-identities
+  (let* (;; we make sure that all files actually exist
+         (filtered-cleartext-identities
           (seq-filter (lambda (identity)
-                        (and identity
-                             (file-exists-p (expand-file-name identity))))
+                        (and identity (file-exists-p (expand-file-name identity))))
                       cleartext-identities))
          (age-flags (append (list "--decrypt")
-                            (mapcan (lambda (identity)
-                                      (list "--identity" (expand-file-name identity)))
+                            (mapcan (lambda (path) (list "--identity" (expand-file-name path)))
                                     filtered-cleartext-identities)
                             (list (buffer-file-name))))
          (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
@@ -166,6 +165,11 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
                                   "(import \"%s\").\"%s\".publicKeys"
                                   (agenix-locate-secrets-nix buffer-file-name)
                                   (agenix-path-relative-to-secrets-nix (buffer-file-name))))))
+           ;; resolve function arguments and expand key file paths
+           (resolved-agenix-key-files
+            (seq-map (lambda (el) (cond ((stringp el) (expand-file-name el))
+                                        ((functionp el) (expand-file-name (funcall el)))
+                                        (t ""))) agenix-key-files))
            (nix-exit-code (car nix-res))
            (nix-output (car (cdr nix-res))))
 
@@ -182,15 +186,16 @@ Error: %s" (buffer-file-name) nix-output)
                 (message "Not decrypting. File %s does not exist and will be created when you \
 will save this buffer." (buffer-file-name))
                 (read-only-mode -1))
-            ;; if no key files in `agenix-key-files` are protected, just proceed
-            (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x))) agenix-key-files)
-                (agenix--decrypt-current-buffer-using-cleartext-identities agenix-key-files)
+            ;; if no key files in `agenix-key-files` are password protected, just proceed
+            (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x)))
+                             resolved-agenix-key-files)
+                (agenix--decrypt-current-buffer-using-cleartext-identities resolved-agenix-key-files)
               ;; else, pick one file and possibly decrypt it
               (let* ((temp-identity-path nil)
                      (selected-identity-path (expand-file-name
                                               (completing-read "Select private key to use \
 (or enter a custom path): "
-                                                               agenix-key-files nil nil))))
+                                                               resolved-agenix-key-files nil nil))))
                 (unwind-protect
                     (progn
                       (if (agenix--identity-protected-p selected-identity-path)
