@@ -30,8 +30,6 @@
 
 ;;; Code:
 
-(require 'cl-lib)
-
 (defcustom agenix-age-program "age"
   "The age program."
   :group 'agenix
@@ -89,17 +87,6 @@ FUNC takes a temporary buffer that will be disposed after the call."
          (res (funcall func age-buf)))
     (kill-buffer age-buf)
     res))
-
-(defun agenix--extract-identity-path (args)
-  "Extract the path of the identity file from ARGS.
-Check if the file exists and is readable."
-  (let ((identity-index (or (cl-position "--identity" args :test 'string=)
-                            (cl-position "-i" args :test 'string=))))
-    (when identity-index
-      (let ((identity-path (nth (1+ identity-index) args)))
-        (if (and identity-path (file-readable-p identity-path))
-            identity-path
-          (error "Identity file %s does not exist or is not readable" identity-path))))))
 
 (defun agenix--identity-protected-p (identity-path)
   "Check if the identity file at IDENTITY-PATH is password protected.
