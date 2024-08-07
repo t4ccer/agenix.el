@@ -170,15 +170,15 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
 Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output)
         (let* ((keys (json-parse-string nix-output :array-type 'list))
-               (age-flags (list "--decrypt")))
+               (age-flags (list "--decrypt"))
+               (selected-key (expand-file-name
+                              (completing-read "Select private key to use (or enter a custom path): "
+                                               agenix-key-files nil nil)))
+               (temp-identity-path nil))
 
-          ;; Add all user's keys to the age command
-          (dolist (keyspec agenix-key-files)
-            (let ((key-path (cond ((stringp keyspec) keyspec)
-                                  (t (funcall keyspec)))))
-              (when (and key-path (file-exists-p (expand-file-name key-path)))
-                (setq age-flags
-                      (nconc age-flags (list "--identity" (expand-file-name key-path)))))))
+          ;; Add the selected key to the age command
+          (when (and selected-keys (file-exists-p (car selected-keys)))
+            (setq age-flags (nconc age-flags (list "--identity" (car selected-keys)))))
 
           ;; Add file-path to decrypt to the age command
           (setq age-flags (nconc age-flags (list (buffer-file-name))))
