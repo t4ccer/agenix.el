@@ -110,8 +110,10 @@ See also https://stackoverflow.com/a/112409/5616591.''"
                                              "-p" "-P" password "-N" "" "-f" temp-file)))
           (if (= 0 rekey-exit-code)
               temp-file
-            (error "Failed to open private key %s. Wrong password? Please close the buffer and try again" identity-path)))
-      (error "Failed to create temporary copy of identity file. Please close the buffer and try again"))))
+            (error "Failed to open private key %s. Wrong password? \
+Please close the buffer and try again" identity-path)))
+      (error "Failed to create temporary copy of identity file. \
+Please close the buffer and try again"))))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
@@ -180,17 +182,21 @@ will save this buffer." (buffer-file-name))
               ;; else, pick one file and possibly decrypt it
               (let* ((temp-identity-path nil)
                      (selected-identity-path (expand-file-name
-                                              (completing-read "Select private key to use (or enter a custom path): "
+                                              (completing-read "Select private key to use \
+(or enter a custom path): "
                                                                agenix-key-files nil nil))))
                 (unwind-protect
                     (progn
                       (if (agenix--identity-protected-p selected-identity-path)
                           (let ((password (agenix--prompt-password selected-identity-path)))
-                            (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password)))
+                            (setq temp-identity-path
+                                  (agenix--create-temp-identity selected-identity-path password)))
                         (setq temp-identity-path selected-identity-path))
-                      (agenix--decrypt-current-buffer-using-cleartext-identities (list temp-identity-path)))
+                      (agenix--decrypt-current-buffer-using-cleartext-identities
+                       (list temp-identity-path)))
                   ;; Clean up temporary identity file, which may contain plaintext secret.
-                  (when (and temp-identity-path (not (equal temp-identity-path selected-identity-path)))
+                  (when (and temp-identity-path
+                             (not (equal temp-identity-path selected-identity-path)))
                     (delete-file temp-identity-path)))))))))))
 
 ;;;###autoload
