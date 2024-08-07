@@ -123,8 +123,7 @@ Please close the buffer and try again"))))
 
 (defun agenix--decrypt-current-buffer-using-cleartext-identities (cleartext-identities)
   "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
-Called as part of AGENIX-DECRYPT-BUFFER which sets the buffer and some variables,
-and does some more validation."
+Called as part of AGENIX-DECRYPT-BUFFER."
   (let* (;; we make sure that all files actually exist
          (filtered-cleartext-identities
           (seq-filter (lambda (identity)
@@ -181,6 +180,7 @@ Error: %s" (buffer-file-name) nix-output)
           (setq agenix--encrypted-fp (buffer-file-name))
           (setq agenix--keys keys)
 
+          ;; Check if file already exists
           (if (not (file-exists-p (buffer-file-name)))
               (progn
                 (message "Not decrypting. File %s does not exist and will be created when you \
@@ -189,13 +189,14 @@ will save this buffer." (buffer-file-name))
             ;; if no key files in `agenix-key-files` are password protected, just proceed
             (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x)))
                              resolved-agenix-key-files)
-                (agenix--decrypt-current-buffer-using-cleartext-identities resolved-agenix-key-files)
+                (agenix--decrypt-current-buffer-using-cleartext-identities
+                 resolved-agenix-key-files)
               ;; else, pick one file and possibly decrypt it
               (let* ((temp-identity-path nil)
-                     (selected-identity-path (expand-file-name
-                                              (completing-read "Select private key to use \
-(or enter a custom path): "
-                                                               resolved-agenix-key-files nil nil))))
+                     (selected-identity-path
+                      (expand-file-name
+                       (completing-read "Select private key to use (or enter a custom path): "
+                                        resolved-agenix-key-files nil nil))))
                 (unwind-protect
                     (progn
                       (if (agenix--identity-protected-p selected-identity-path)
