@@ -143,21 +143,21 @@ Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output)
         (let* ((keys (json-parse-string nix-output :array-type 'list))
                (age-flags (list "--decrypt"))
-               (selected-key (expand-file-name
-                              (completing-read "Select private key to use (or enter a custom path): "
-                                               agenix-key-files nil nil)))
+               (selected-identity-path (expand-file-name
+                                        (completing-read "Select private key to use (or enter a custom path): "
+                                                         agenix-key-files nil nil)))
                (temp-identity-path nil))
 
           ;; make sure we always delete temp-identity-path, as it may have the plaintext key
           (unwind-protect
               (progn
                 ;; Check if the selected key is password-protected
-                (when (and selected-key (file-exists-p selected-key))
-                  (if (agenix--identity-protected-p selected-key)
-                      (let ((password (agenix--prompt-password selected-key)))
-                        (setq temp-identity-path (agenix--create-temp-identity selected-key password))
+                (when (and selected-identity-path (file-exists-p selected-identity-path))
+                  (if (agenix--identity-protected-p selected-identity-path)
+                      (let ((password (agenix--prompt-password selected-identity-path)))
+                        (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password))
                         (setq age-flags (nconc age-flags (list "--identity" temp-identity-path))))
-                    (setq age-flags (nconc age-flags (list "--identity" selected-key)))))
+                    (setq age-flags (nconc age-flags (list "--identity" selected-identity-path)))))
 
                 ;; Add file-path to decrypt to the age command
                 (setq age-flags (nconc age-flags (list (buffer-file-name))))
