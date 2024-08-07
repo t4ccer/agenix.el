@@ -117,11 +117,14 @@ See also https://security.stackexchange.com/a/245767/318401."
 PASSWORD is the current password of the identity file.
 See also https://stackoverflow.com/a/112409/5616591.''"
   (let* ((temp-file (make-temp-file "agenix-temp-identity"))
-         (copy-cmd (format "cp %s %s" identity-path temp-file))
-         (rekey-cmd (format "ssh-keygen -p -P \"%s\" -N \"\" -f %s" password temp-file)))
-    (shell-command copy-cmd)
-    (shell-command rekey-cmd)
-    temp-file))
+         (copy-exit-code (call-process "cp" nil nil nil identity-path temp-file)))
+    (if (= 0 copy-exit-code)
+        (let ((rekey-exit-code (call-process "ssh-keygen" nil nil nil
+                                             "-p" "-P" password "-N" "" "-f" temp-file)))
+          (if (= 0 rekey-exit-code)
+              temp-file
+            (error "Failed to open private key")))
+      (error "Failed to create temporary copy of identity file"))))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
