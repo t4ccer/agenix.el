@@ -110,7 +110,7 @@ See also https://stackoverflow.com/a/112409/5616591.''"
                                              "-p" "-P" password "-N" "" "-f" temp-file)))
           (if (= 0 rekey-exit-code)
               temp-file
-            (error "Failed to open private key")))
+            (error "Failed to open private key %s. Wrong password?" identity-path)))
       (error "Failed to create temporary copy of identity file"))))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
@@ -141,57 +141,50 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
           (warn "Nix evaluation error.
 Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output)
-        (let* ((keys (json-parse-string nix-output :array-type 'list))
-               (age-flags (list "--decrypt"))
-               (selected-identity-path (expand-file-name
-                                        (completing-read "Select private key to use (or enter a custom path): "
-                                                         agenix-key-files nil nil)))
-               (temp-identity-path nil))
+        (let* ((keys (json-parse-string nix-output :array-type 'list)))
+          (setq agenix--encrypted-fp (buffer-file-name))
+          (setq agenix--keys keys)
 
-          ;; make sure we always delete temp-identity-path, as it may have the plaintext key
-          (unwind-protect
+          (if (not (file-exists-p (buffer-file-name)))
               (progn
-                ;; Check if the selected key is password-protected
-                (when (and selected-identity-path (file-exists-p selected-identity-path))
-                  (if (agenix--identity-protected-p selected-identity-path)
-                      (let ((password (agenix--prompt-password selected-identity-path)))
-                        (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password))
-                        (setq age-flags (nconc age-flags (list "--identity" temp-identity-path))))
-                    (setq age-flags (nconc age-flags (list "--identity" selected-identity-path)))))
-
-                ;; Add file-path to decrypt to the age command
-                (setq age-flags (nconc age-flags (list (buffer-file-name))))
-                (setq agenix--encrypted-fp (buffer-file-name))
-                (setq agenix--keys keys)
-
-                ;; Check if file already exists
-                (if (not (file-exists-p (buffer-file-name)))
-                    (progn
-                      (message "Not decrypting. File %s does not exist and will be created when you \
+                (message "Not decrypting. File %s does not exist and will be created when you \
 will save this buffer." (buffer-file-name))
-                      (read-only-mode -1))
-                  (let* ((age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
-                         (age-exit-code (car age-res))
-                         (age-output (car (cdr age-res))))
+                (read-only-mode -1))
+            (let* ((selected-identity-path (expand-file-name
+                                            (completing-read "Select private key to use (or enter a custom path): "
+                                                             agenix-key-files nil nil)))
+                   (temp-identity-path nil))
+              (unwind-protect
+                  (progn
+                    (when (and selected-identity-path (file-exists-p selected-identity-path))
+                      (if (agenix--identity-protected-p selected-identity-path)
+                          (let ((password (agenix--prompt-password selected-identity-path)))
+                            (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password)))
+                        (setq temp-identity-path selected-identity-path)))
+                    
+                    (let* ((age-flags (list "--decrypt" "--identity" temp-identity-path (buffer-file-name)))
+                           (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
+                           (age-exit-code (car age-res))
+                           (age-output (car (cdr age-res))))
 
-                    (if (= 0 age-exit-code)
-                        (progn
-                          ;; Replace buffer with decrypted content
-                          (read-only-mode -1)
-                          (erase-buffer)
-                          (insert age-output)
+                      (if (= 0 age-exit-code)
+                          (progn
+                            ;; Replace buffer with decrypted content
+                            (read-only-mode -1)
+                            (erase-buffer)
+                            (insert age-output)
 
-                          ;; Mark buffer as not modified
-                          (set-buffer-modified-p nil)
-                          (setq buffer-undo-list agenix--undo-list))
-                      (error age-output)))))
+                            ;; Mark buffer as not modified
+                            (set-buffer-modified-p nil)
+                            (setq buffer-undo-list agenix--undo-list))
+                        (error "Decryption failed: %s" age-output))))
 
-            ;; Clean up temporary identity file
-            (when temp-identity-path
-              (delete-file temp-identity-path))))
+                ;; Clean up temporary identity file
+                (when (and temp-identity-path (not (equal temp-identity-path selected-identity-path)))
+                  (delete-file temp-identity-path)))))
 
-        (when agenix--point
-          (goto-char agenix--point))))))
+          (when agenix--point
+            (goto-char agenix--point)))))))
 
 ;;;###autoload
 (defun agenix-save-decrypted (&optional unencrypted-buffer)
