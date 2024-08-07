@@ -123,14 +123,11 @@ See also https://stackoverflow.com/a/112409/5616591.''"
   "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
 Called as part of AGENIX-DECRYPT-BUFFER which sets the buffer and some variables,
 and does some more validation."
-  (let* ((age-flags (list "--decrypt"))
-         (age-flags-with-identities
-          (apply #'nconc
-                 age-flags
-                 (mapcan (lambda (identity) (list "--identity" identity))
-                         cleartext-identities)))
-         (age-flags-final (append age-flags-with-identities (list (buffer-file-name))))
-         (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags-final))
+  (let* ((age-flags (append (list "--decrypt")
+                            (nconc (mapcan (lambda (identity) (list "--identity" identity))
+                                           cleartext-identities))
+                            (list (buffer-file-name))))
+         (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
          (age-exit-code (car age-res))
          (age-output (car (cdr age-res))))
 
@@ -177,13 +174,24 @@ Error: %s" (buffer-file-name) nix-output)
                 (message "Not decrypting. File %s does not exist and will be created when you \
 will save this buffer." (buffer-file-name))
                 (read-only-mode -1))
-            (let* ((selected-identity-path (expand-file-name
-                                            (completing-read "Select private key to use (or enter a custom path): "
-                                                             agenix-key-files nil nil))))
-              (agenix--decrypt-current-buffer-using-identity selected-identity-path))))
-
-        (when agenix--point
-          (goto-char agenix--point))))))
+            ;; if no key files in `agenix-key-files` are protected, just proceed
+            (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x))) agenix-key-files)
+                (agenix--decrypt-current-buffer-using-cleartext-identities agenix-key-files)
+              ;; else, pick one file and possibly decrypt it
+              (let* ((temp-identity-path nil)
+                     (selected-identity-path (expand-file-name
+                                              (completing-read "Select private key to use (or enter a custom path): "
+                                                               agenix-key-files nil nil))))
+                (unwind-protect
+                    (progn
+                      (if (agenix--identity-protected-p selected-identity-path)
+                          (let ((password (agenix--prompt-password selected-identity-path)))
+                            (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password)))
+                        (setq temp-identity-path selected-identity-path))
+                      (agenix--decrypt-current-buffer-using-cleartext-identities (list temp-identity-path)))
+                  ;; Clean up temporary identity file, which may contain plaintext secret.
+                  (when (and temp-identity-path (not (equal temp-identity-path selected-identity-path)))
+                    (delete-file temp-identity-path)))))))))))
 
 ;;;###autoload
 (defun agenix-save-decrypted (&optional unencrypted-buffer)
