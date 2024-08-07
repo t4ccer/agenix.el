@@ -125,9 +125,15 @@ Please close the buffer and try again"))))
   "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
 Called as part of AGENIX-DECRYPT-BUFFER which sets the buffer and some variables,
 and does some more validation."
-  (let* ((age-flags (append (list "--decrypt")
-                            (nconc (mapcan (lambda (identity) (list "--identity" identity))
-                                           cleartext-identities))
+  (let* ((filtered-cleartext-identities
+          (seq-filter (lambda (identity)
+                        (and identity
+                             (file-exists-p (expand-file-name identity))))
+                      cleartext-identities))
+         (age-flags (append (list "--decrypt")
+                            (mapcan (lambda (identity)
+                                      (list "--identity" (expand-file-name identity)))
+                                    filtered-cleartext-identities)
                             (list (buffer-file-name))))
          (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
          (age-exit-code (car age-res))
