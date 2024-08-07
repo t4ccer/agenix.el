@@ -110,8 +110,8 @@ See also https://stackoverflow.com/a/112409/5616591.''"
                                              "-p" "-P" password "-N" "" "-f" temp-file)))
           (if (= 0 rekey-exit-code)
               temp-file
-            (error "Failed to open private key %s. Wrong password?" identity-path)))
-      (error "Failed to create temporary copy of identity file"))))
+            (error "Failed to open private key %s. Wrong password? Please close the buffer and try again" identity-path)))
+      (error "Failed to create temporary copy of identity file. Please close the buffer and try again"))))
 
 (defun agenix--process-exit-code-and-output (program &rest args)
   "Run PROGRAM with ARGS and return the exit code and output in a list."
@@ -154,30 +154,31 @@ will save this buffer." (buffer-file-name))
                                             (completing-read "Select private key to use (or enter a custom path): "
                                                              agenix-key-files nil nil)))
                    (temp-identity-path nil))
+              ;; We protect here to make sure we always delete the `temp-identity-path`, which may contain the cleartext private key.
               (unwind-protect
-                  (progn
-                    (when (and selected-identity-path (file-exists-p selected-identity-path))
+                  (if (and selected-identity-path (file-exists-p selected-identity-path))
                       (if (agenix--identity-protected-p selected-identity-path)
                           (let ((password (agenix--prompt-password selected-identity-path)))
                             (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password)))
-                        (setq temp-identity-path selected-identity-path)))
-                    
-                    (let* ((age-flags (list "--decrypt" "--identity" temp-identity-path (buffer-file-name)))
-                           (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
-                           (age-exit-code (car age-res))
-                           (age-output (car (cdr age-res))))
+                        (setq temp-identity-path selected-identity-path))
+                    (error "Identity path %s not available. Please close the buffer and try again" selected-identity-path))
+                
+                (let* ((age-flags (list "--decrypt" "--identity" temp-identity-path (buffer-file-name)))
+                       (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
+                       (age-exit-code (car age-res))
+                       (age-output (car (cdr age-res))))
 
-                      (if (= 0 age-exit-code)
-                          (progn
-                            ;; Replace buffer with decrypted content
-                            (read-only-mode -1)
-                            (erase-buffer)
-                            (insert age-output)
+                  (if (= 0 age-exit-code)
+                      (progn
+                        ;; Replace buffer with decrypted content
+                        (read-only-mode -1)
+                        (erase-buffer)
+                        (insert age-output)
 
-                            ;; Mark buffer as not modified
-                            (set-buffer-modified-p nil)
-                            (setq buffer-undo-list agenix--undo-list))
-                        (error "Decryption failed: %s" age-output))))
+                        ;; Mark buffer as not modified
+                        (set-buffer-modified-p nil)
+                        (setq buffer-undo-list agenix--undo-list))
+                    (error "Decryption failed: %s. Please close the buffer and try again" age-output)))
 
                 ;; Clean up temporary identity file
                 (when (and temp-identity-path (not (equal temp-identity-path selected-identity-path)))
