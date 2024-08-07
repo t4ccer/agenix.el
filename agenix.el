@@ -119,41 +119,32 @@ See also https://stackoverflow.com/a/112409/5616591.''"
    (lambda (buf) (list (apply #'call-process program nil buf nil args)
                        (agenix--buffer-string* buf)))))
 
-(defun agenix--decrypt-current-buffer-using-identity (selected-identity-path)
-  "Decrypt current buffer in place using identity from SELECTED-IDENTITY-PATH.
+(defun agenix--decrypt-current-buffer-using-cleartext-identities (cleartext-identities)
+  "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
 Called as part of AGENIX-DECRYPT-BUFFER which sets the buffer and some variables,
 and does some more validation."
-  ;; We protect here to make sure we always delete the `temp-identity-path`,
-  ;; which may contain the cleartext private key.
-  (unwind-protect
-      (let ((temp-identity-path nil))
-        (if (and selected-identity-path (file-exists-p selected-identity-path))
-            (if (agenix--identity-protected-p selected-identity-path)
-                (let ((password (agenix--prompt-password selected-identity-path)))
-                  (setq temp-identity-path (agenix--create-temp-identity selected-identity-path password)))
-              (setq temp-identity-path selected-identity-path))
-          (error "Identity path %s not available. Please close the buffer and try again" selected-identity-path))
+  (let* ((age-flags (list "--decrypt"))
+         (age-flags-with-identities
+          (apply #'nconc
+                 age-flags
+                 (mapcan (lambda (identity) (list "--identity" identity))
+                         cleartext-identities)))
+         (age-flags-final (append age-flags-with-identities (list (buffer-file-name))))
+         (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags-final))
+         (age-exit-code (car age-res))
+         (age-output (car (cdr age-res))))
 
-        (let* ((age-flags (list "--decrypt" "--identity" temp-identity-path (buffer-file-name)))
-               (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
-               (age-exit-code (car age-res))
-               (age-output (car (cdr age-res))))
+    (if (= 0 age-exit-code)
+        (progn
+          ;; Replace buffer with decrypted content
+          (read-only-mode -1)
+          (erase-buffer)
+          (insert age-output)
 
-          (if (= 0 age-exit-code)
-              (progn
-                ;; Replace buffer with decrypted content
-                (read-only-mode -1)
-                (erase-buffer)
-                (insert age-output)
-
-                ;; Mark buffer as not modified
-                (set-buffer-modified-p nil)
-                (setq buffer-undo-list agenix--undo-list))
-            (error "Decryption failed: %s. Please close the buffer and try again" age-output)))
-
-        ;; Clean up temporary identity file
-        (when (and temp-identity-path (not (equal temp-identity-path selected-identity-path)))
-          (delete-file temp-identity-path)))))
+          ;; Mark buffer as not modified
+          (set-buffer-modified-p nil)
+          (setq buffer-undo-list agenix--undo-list))
+      (error "Decryption failed: %s. Please close the buffer and try again" age-output))))
 
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
