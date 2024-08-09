@@ -126,10 +126,21 @@ Please close the buffer and try again"))))
 Called as part of AGENIX-DECRYPT-BUFFER."
   (let* (;; we make sure that all files actually exist
          (filtered-cleartext-identities
+(defun agenix--process-agenix-key-files ()
+  "Read AGENIX-KEY-FILES, resolve any functions, and assert that paths exist."
+  (let* (;; resolve functions
+         (resolved-key-files
+          (seq-map (lambda (el) (cond ((stringp el) (expand-file-name el))
+                                      ((functionp el) (expand-file-name (funcall el)))
+                                      (t ""))) agenix-key-files))
+         ;; filter for files that actually exist
+         (filtered-key-files
           (seq-filter (lambda (identity)
                         (and identity (file-exists-p (expand-file-name identity))))
-                      cleartext-identities))
-         (age-flags (append (list "--decrypt")
+                      resolved-key-files)))
+    filtered-key-files))
+
+
                             (mapcan (lambda (path) (list "--identity" (expand-file-name path)))
                                     filtered-cleartext-identities)
                             (list (buffer-file-name))))
@@ -164,11 +175,6 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
                                   "(import \"%s\").\"%s\".publicKeys"
                                   (agenix-locate-secrets-nix buffer-file-name)
                                   (agenix-path-relative-to-secrets-nix (buffer-file-name))))))
-           ;; resolve function arguments and expand key file paths
-           (resolved-agenix-key-files
-            (seq-map (lambda (el) (cond ((stringp el) (expand-file-name el))
-                                        ((functionp el) (expand-file-name (funcall el)))
-                                        (t ""))) agenix-key-files))
            (nix-exit-code (car nix-res))
            (nix-output (car (cdr nix-res))))
 
@@ -187,6 +193,8 @@ Error: %s" (buffer-file-name) nix-output)
 will save this buffer." (buffer-file-name))
                 (read-only-mode -1))
             ;; if no key files in `agenix-key-files` are password protected, just proceed
+          (let* (;; Make sure AGENIX-KEY-FILES exist and are strings
+                 (processed-agenix-key-files (agenix--process-agenix-key-files)))
             (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x)))
                              resolved-agenix-key-files)
                 (agenix--decrypt-current-buffer-using-cleartext-identities
