@@ -121,11 +121,6 @@ Please close the buffer and try again"))))
    (lambda (buf) (list (apply #'call-process program nil buf nil args)
                        (agenix--buffer-string* buf)))))
 
-(defun agenix--decrypt-current-buffer-using-cleartext-identities (cleartext-identities)
-  "Decrypt current buffer in place using CLEARTEXT-IDENTITIES.
-Called as part of AGENIX-DECRYPT-BUFFER."
-  (let* (;; we make sure that all files actually exist
-         (filtered-cleartext-identities
 (defun agenix--process-agenix-key-files ()
   "Read AGENIX-KEY-FILES, resolve any functions, and assert that paths exist."
   (let* (;; resolve functions
@@ -141,8 +136,15 @@ Called as part of AGENIX-DECRYPT-BUFFER."
     filtered-key-files))
 
 
+
+
+(defun agenix--decrypt-current-buffer-using-cleartext-identities (cleartext-key-paths)
+  "Decrypt current buffer in place using CLEARTEXT-KEY-PATHS.
+Called as part of AGENIX-DECRYPT-BUFFER. Expects CLEARTEXT-KEYS to be a list of
+private key paths to keys which exist and are not password protected."
+  (let* ((age-flags (append (list "--decrypt")
                             (mapcan (lambda (path) (list "--identity" (expand-file-name path)))
-                                    filtered-cleartext-identities)
+                                    cleartext-key-paths)
                             (list (buffer-file-name))))
          (age-res (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
          (age-exit-code (car age-res))
@@ -163,7 +165,10 @@ Called as part of AGENIX-DECRYPT-BUFFER."
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
   "Decrypt ENCRYPTED-BUFFER in place.
-If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
+If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer. If all
+AGENIX-KEY-FILES are cleartext (not password protected), pass them to age
+command as identities. Else, prompt for which key to use, and then optionally
+prompt for password."
   (interactive
    (when current-prefix-arg
      (list (read-buffer "Encrypted buffer: " (current-buffer) t))))
@@ -184,27 +189,30 @@ Probably file %s is not declared as a secret in 'secrets.nix' file.
 Error: %s" (buffer-file-name) nix-output)
         (let* ((keys (json-parse-string nix-output :array-type 'list)))
           (setq agenix--encrypted-fp (buffer-file-name))
-          (setq agenix--keys keys)
+          (setq agenix--keys keys))
 
-          ;; Check if file already exists
-          (if (not (file-exists-p (buffer-file-name)))
-              (progn
-                (message "Not decrypting. File %s does not exist and will be created when you \
+        ;; Check if file already exists
+        (if (not (file-exists-p (buffer-file-name)))
+            (progn
+              (message "Not decrypting. File %s does not exist and will be created when you \
 will save this buffer." (buffer-file-name))
-                (read-only-mode -1))
-            ;; if no key files in `agenix-key-files` are password protected, just proceed
+              (read-only-mode -1))
           (let* (;; Make sure AGENIX-KEY-FILES exist and are strings
                  (processed-agenix-key-files (agenix--process-agenix-key-files)))
+            ;; if no key files in `agenix-key-files` are password protected, proceed with decryption
             (if (seq-every-p (lambda (x) (not (agenix--identity-protected-p x)))
-                             resolved-agenix-key-files)
+                             processed-agenix-key-files)
                 (agenix--decrypt-current-buffer-using-cleartext-identities
-                 resolved-agenix-key-files)
-              ;; else, pick one file and possibly decrypt it
+                 processed-agenix-key-files)
+              ;; else, pick one key file and possibly decrypt it. specifically, if the chosen key
+              ;; is not cleartext, copy it to temp file and deobfuscate the temp file in place by
+              ;; prompting for password. make sure to always delete that temp file again.
               (let* ((temp-identity-path nil)
                      (selected-identity-path
                       (expand-file-name
                        (completing-read "Select private key to use (or enter a custom path): "
-                                        resolved-agenix-key-files nil nil))))
+                                        processed-agenix-key-files nil nil))))
+                ;; always clean up temporary identity file, which may contain plaintext secret.
                 (unwind-protect
                     (progn
                       (if (agenix--identity-protected-p selected-identity-path)
@@ -214,7 +222,6 @@ will save this buffer." (buffer-file-name))
                         (setq temp-identity-path selected-identity-path))
                       (agenix--decrypt-current-buffer-using-cleartext-identities
                        (list temp-identity-path)))
-                  ;; Clean up temporary identity file, which may contain plaintext secret.
                   (when (and temp-identity-path
                              (not (equal temp-identity-path selected-identity-path)))
                     (delete-file temp-identity-path)))))))))))
