@@ -1,12 +1,17 @@
 * =agenix.el=
 
 [[https://melpa.org/#/agenix][file:https://melpa.org/packages/agenix-badge.svg]]
+[[https://stable.melpa.org/#/agenix][file:https://stable.melpa.org/packages/agenix-badge.svg]]
 
-=agenix.el= enables editing =agenix= secrets without leaving emacs.
+=agenix.el= enables editing =agenix= secrets without leaving Emacs.
 
 ** Usage
 
 =agenix.el= enables fully transparent =agenix= secrets editing. Open your =agenix= secret as any other file, make changes and save, it'll be automatically encrypted back and saved.
+
+*** Keys with passphrase
+
+SSH keys with passphrases are not supported out of the box and they will cause =age= executable to fail as it does not have stdin to get passphrase input. This can be worked around by either adding a function to  =agenix-key-files= that will return a key without passphrase or by integrating with [[https://github.com/t4ccer/elrage#agenixel-integration][elrage]].
 
 ** Prerequisites
 
@@ -44,7 +49,7 @@ If you wish to use =direnv= using =envrc= package to setup =age= binary path for
 
 ** License
 
-Copyright (C) 2022 Tomasz Maciosowski (t4ccer)
+Copyright (C) 2022-2024 Tomasz Maciosowski (t4ccer)
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 

@@ -1,0 +1,29 @@
+* Changelog
+
+** v1.3
+
+*** Added
+
+- Allow for functions to be passed in =agenix-key-files=
+- =agenix-age-decrypt-function= variable to customize decryption
+- =agenix-age-encrypt-function= variable to customize encryption
+
+*** Fixed
+
+- Search parent directory for =secrets.nix= file
+
+** v1.2
+
+*** Fixed
+
+- Fix cursor moving on buffer save
+
+** v1.1
+
+*** Added
+
+- Support =age= executable provided by direnv
+
+** v1.0
+
+First stable release
