@@ -1,6 +1,6 @@
 ;;; agenix.el --- Decrypt and encrypt agenix secrets  -*- lexical-binding: t -*-
 
-;; Copyright (C) 2022-2023 Tomasz Maciosowski (t4ccer)
+;; Copyright (C) 2022-2024 Tomasz Maciosowski (t4ccer)
 
 ;; Author: Tomasz Maciosowski <t4ccer@gmail.com>
 ;; Maintainer: Tomasz Maciosowski <t4ccer@gmail.com>
@@ -46,6 +46,16 @@
 Can be used to set up age binary path."
   :group 'agenix
   :type 'hook)
+
+(defcustom agenix-age-decrypt-function 'agenix-age-decrypt-noninteractive-executable
+  "Function used to age-decrypt files."
+  :group 'agenix
+  :type 'function)
+
+(defcustom agenix-age-encrypt-function 'agenix-age-encrypt-executable
+  "Function used to age-decrypt files."
+  :group 'agenix
+  :type 'function)
 
 (defvar-local agenix--encrypted-fp nil)
 
@@ -94,6 +104,61 @@ FUNC takes a temporary buffer that will be disposed after the call."
    (lambda (buf) (list (apply #'call-process program nil buf nil args)
                        (agenix--buffer-string* buf)))))
 
+(defun agenix-age-decrypt-noninteractive-executable (filepath identities)
+  "Try to decrypt FILEPATH using keys from IDENTITIES and return the plain text.
+This function will call age executable without handling stdin so if a key with
+passphrase is required to decrypt a secret this function will fail"
+  (let ((age-flags (list "--decrypt")))
+
+    ;; Add all user's keys to the age command
+    (dolist (identity identities)
+      (if (and identity (file-exists-p identity))
+          (setq age-flags
+                (nconc age-flags (list "--identity" identity)))
+        (warn (format "Identity file '%s' does not exist" identity))))
+
+    (setq age-flags (nconc age-flags (list filepath)))
+
+    (let*
+        ((age-res
+          (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
+         (age-exit-code (car age-res))
+         (age-output (car (cdr age-res))))
+
+      (if (= 0 age-exit-code)
+          age-output
+        (error age-output)))))
+
+(defun agenix-age-encrypt-executable (filepath plaintext recipients)
+  "Encrypt PLAINTEXT using each of the RECIPIENTS keys and save it to FILEPATH."
+  (let ((age-flags (list "--encrypt")))
+    (dolist (k recipients)
+      (setq age-flags (nconc age-flags (list "--recipient" k))))
+    (setq age-flags (nconc age-flags (list "-o" filepath)))
+    (let ((age-res
+           (agenix--with-temp-buffer
+            (lambda (buf)
+              (list
+               (apply #'call-process-region
+                      plaintext nil
+                      agenix-age-program
+                      nil
+                      buf
+                      t
+                      age-flags)
+               (agenix--buffer-string* buf))))))
+      (when (/= 0 (car age-res))
+        (error (car (cdr age-res))))
+      t)))
+
+(defun agenix--expand-key (keyspec)
+  "Evaluate KEYSPEC if it is a function and expand file paths."
+  (expand-file-name (if (stringp keyspec) keyspec (funcall keyspec))))
+
+(defun agenix--get-expanded-key-files ()
+  "Get all keys fully evaluated and expanded."
+  (cl-map 'list 'agenix--expand-key agenix-key-files))
+
 ;;;###autoload
 (defun agenix-decrypt-buffer (&optional encrypted-buffer)
   "Decrypt ENCRYPTED-BUFFER in place.
@@ -107,30 +172,25 @@ If ENCRYPTED-BUFFER is unset or nil, decrypt the current buffer."
                            (list "--strict" "--json" "--eval" "--expr"
                                  (format
                                   "(import \"%s\").\"%s\".publicKeys"
-                                  (agenix-locate-secrets-nix buffer-file-name)
+                                  (agenix-locate-secrets-nix (buffer-file-name))
                                   (agenix-path-relative-to-secrets-nix (buffer-file-name))))))
            (nix-exit-code (car nix-res))
            (nix-output (car (cdr nix-res))))
 
       (if (/= nix-exit-code 0)
-          (warn "Nix evaluation error.
+          (progn
+            (fundamental-mode)
+            (user-error "Nix evaluation error. \
 Probably file %s is not declared as a secret in 'secrets.nix' file.
-Error: %s" (buffer-file-name) nix-output)
-        (let* ((keys (json-parse-string nix-output :array-type 'list))
-               (age-flags (list "--decrypt")))
 
-          ;; Add all user's keys to the age command
-          (dolist (keyspec agenix-key-files)
-            (let ((key-path (cond ((stringp keyspec) keyspec)
-                                  (t (funcall keyspec)))))
-              (when (and key-path (file-exists-p (expand-file-name key-path)))
-                (setq age-flags
-                      (nconc age-flags (list "--identity" (expand-file-name key-path)))))))
+Error: %s" (buffer-file-name) nix-output))
 
-          ;; Add file-path to decrypt to the age command
-          (setq age-flags (nconc age-flags (list (buffer-file-name))))
+        (let ((encryption-keys (json-parse-string nix-output :array-type 'list)))
+
           (setq agenix--encrypted-fp (buffer-file-name))
-          (setq agenix--keys keys)
+
+          ;; Save all the keys required to encrypt the file back
+          (setq agenix--keys encryption-keys)
 
           ;; Check if file already exists
           (if (not (file-exists-p (buffer-file-name)))
@@ -138,23 +198,18 @@ Error: %s" (buffer-file-name) nix-output)
                 (message "Not decrypting. File %s does not exist and will be created when you \
 will save this buffer." (buffer-file-name))
                 (read-only-mode -1))
-            (let*
-                ((age-res
-                  (apply #'agenix--process-exit-code-and-output agenix-age-program age-flags))
-                 (age-exit-code (car age-res))
-                 (age-output (car (cdr age-res))))
 
-              (if (= 0 age-exit-code)
-                  (progn
-                    ;; Replace buffer with decrypted content
-                    (read-only-mode -1)
-                    (erase-buffer)
-                    (insert age-output)
+            (let ((age-decrypted (funcall agenix-age-decrypt-function
+                                          (buffer-file-name)
+                                          (agenix--get-expanded-key-files))))
+              ;; Replace buffer with decrypted content
+              (read-only-mode -1)
+              (erase-buffer)
+              (insert age-decrypted)
 
-                    ;; Mark buffer as not modified
-                    (set-buffer-modified-p nil)
-                    (setq buffer-undo-list agenix--undo-list))
-                (error age-output))))
+              ;; Mark buffer as not modified
+              (set-buffer-modified-p nil)
+              (setq buffer-undo-list agenix--undo-list)))
           (when agenix--point
             (goto-char agenix--point)))))))
 
@@ -166,31 +221,17 @@ If UNENCRYPTED-BUFFER is unset or nil, use the current buffer."
    (when current-prefix-arg
      (list (read-buffer "Unencrypted buffer: " (current-buffer) t))))
   (with-current-buffer (or unencrypted-buffer (current-buffer))
-    (let* ((age-flags (list "--encrypt")))
-      (progn
-        (dolist (k agenix--keys)
-          (setq age-flags (nconc age-flags (list "--recipient" k))))
-        (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
-        (let* ((decrypted-text (buffer-string))
-               (age-res
-                (agenix--with-temp-buffer
-                 (lambda (buf)
-                   (list
-                    (apply #'call-process-region
-                           decrypted-text nil
-                           agenix-age-program
-                           nil
-                           buf
-                           t
-                           age-flags)
-                    (agenix--buffer-string* buf))))))
-          (when (/= 0 (car age-res))
-            (error (car (cdr age-res))))
-          (setq agenix--point (point))
-          (setq agenix--undo-list buffer-undo-list)
-          (revert-buffer :ignore-auto :noconfirm :preserve-modes)
-          (set-buffer-modified-p nil)
-          t)))))
+    (let ((age-flags (list "--encrypt")))
+      (dolist (k agenix--keys)
+        (setq age-flags (nconc age-flags (list "--recipient" k))))
+      (setq age-flags (nconc age-flags (list "-o" agenix--encrypted-fp)))
+      (let ((plain-text (buffer-string)))
+        (funcall agenix-age-encrypt-function agenix--encrypted-fp plain-text agenix--keys)
+        (setq agenix--point (point))
+        (setq agenix--undo-list buffer-undo-list)
+        (revert-buffer :ignore-auto :noconfirm :preserve-modes)
+        (set-buffer-modified-p nil)
+        t))))
 
 (defun agenix-secrets-base-dir (pathname)
   "Return the directory above PATHNAME containing secrets.nix file, if one exists."
