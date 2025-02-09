@@ -1,0 +1,27 @@
+* Changelog
+
+** v1.3
+
+*** Added
+
+- Support for password protected key files. =agenix.el= will prompt for password for all password protected secret file in =agenix-key-files=
+
+*** Fixed
+
+- Search parent directory for =secrets.nix= file
+
+** v1.2
+
+*** Fixed
+
+- Fix cursor moving on buffer save
+
+** v1.1
+
+*** Added
+
+- Support =age= executable provided by direnv
+
+** v1.0
+
+First stable release
