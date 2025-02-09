@@ -1,6 +1,7 @@
 * =agenix.el=
 
 [[https://melpa.org/#/agenix][file:https://melpa.org/packages/agenix-badge.svg]]
+[[https://stable.melpa.org/#/agenix][file:https://stable.melpa.org/packages/agenix-badge.svg]]
 
 =agenix.el= enables editing =agenix= secrets without leaving emacs.
 
